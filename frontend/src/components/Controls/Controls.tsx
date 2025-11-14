@@ -1,0 +1,110 @@
+import { useState } from 'react';
+import { useSimulationAPI } from '../../hooks/useSimulationAPI';
+import type { Hyperparameters } from '../../types';
+import HyperparametersForm from './HyperparametersForm';
+import './Controls.css';
+
+export default function Controls() {
+  const {
+    createSimulation,
+    trainAgent,
+    pauseSimulation,
+    resumeSimulation,
+    isPaused,
+    isConnected,
+    trainingState,
+    error,
+    clearError,
+  } = useSimulationAPI();
+
+  const [hyperparameters, setHyperparameters] = useState<Hyperparameters>({
+    num_nodes: 10,
+    num_drivers: 3,
+    task_arrival_rate: 0.5,
+  });
+
+  const [trainTimesteps, setTrainTimesteps] = useState<number>(100);
+
+  const handleCreateGraph = async () => {
+    await createSimulation(hyperparameters);
+  };
+
+  const handlePauseResume = async () => {
+    if (isPaused) {
+      await resumeSimulation();
+    } else {
+      await pauseSimulation();
+    }
+  };
+
+  const handleTrain = async () => {
+    await trainAgent(trainTimesteps);
+  };
+
+  return (
+    <div className="controls-container">
+      <div className="controls-header">
+        <h2>Simulation Controls</h2>
+        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+          {isConnected ? '● Connected' : '○ Disconnected'}
+        </div>
+      </div>
+
+      {error && (
+        <div className="error-message">
+          <span>{error}</span>
+          <button onClick={clearError} className="error-close">×</button>
+        </div>
+      )}
+
+      <div className="controls-buttons">
+        <button
+          onClick={handleCreateGraph}
+          disabled={trainingState.isTraining}
+          className="control-button primary"
+        >
+          Create New Graph
+        </button>
+
+        <button
+          onClick={handlePauseResume}
+          disabled={!isConnected || trainingState.isTraining}
+          className="control-button"
+        >
+          {isPaused ? '▶ Continue' : '⏸ Pause'}
+        </button>
+
+        <div className="train-section">
+          <input
+            type="number"
+            value={trainTimesteps}
+            onChange={(e) => setTrainTimesteps(parseInt(e.target.value) || 100)}
+            min={1}
+            max={10000}
+            disabled={trainingState.isTraining}
+            className="train-input"
+          />
+          <button
+            onClick={handleTrain}
+            disabled={!isConnected || trainingState.isTraining}
+            className="control-button"
+          >
+            {trainingState.isTraining ? 'Training...' : 'Train for T timesteps'}
+          </button>
+        </div>
+      </div>
+
+      {trainingState.isTraining && (
+        <div className="training-indicator">
+          Training in progress... (Timesteps: {trainingState.startTimestep || 'N/A'})
+        </div>
+      )}
+
+      <HyperparametersForm
+        hyperparameters={hyperparameters}
+        onChange={setHyperparameters}
+      />
+    </div>
+  );
+}
+

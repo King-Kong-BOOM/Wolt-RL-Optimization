@@ -1,0 +1,41 @@
+.performance-charts-container {
+  background-color: #1e1e1e;
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.performance-charts-container h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0 0 20px 0;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.chart-item {
+  background-color: #252525;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 16px;
+  min-height: 250px;
+}
+
+.training-notice {
+  background-color: rgba(0, 168, 232, 0.2);
+  border: 1px solid #00A8E8;
+  color: #00A8E8;
+  padding: 12px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 13px;
+  margin-top: auto;
+}
+
