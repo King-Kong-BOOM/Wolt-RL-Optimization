@@ -53,6 +53,30 @@ class Graph:
         Initalizes the Graph object. The graph should be connected and look somewhat reasonable in 2d space
         since it represents a physical area where drivers and orders are located.
         """
+
+        self.num_nodes = num_nodes
+        self.num_edges = num_edges
+        self.num_drivers = num_drivers
+        self.order_distribution = order_distribution
+
+        # the node_id of each node is just its index in the self.nodes list
+        self.nodes = []  # List of Node objects
+        #all the matrices most likely should be np.darrays
+        self.edges = None # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
+
+        self.precompute_matrices()
+        
+        pass
+
+    def precompute_matrices(self):
+        """
+        Precomputes the distance and path matrices using djikstra's algorithm or similar.
+        """
+
+        # can (and will) be both precomputed using djikstra starting from each node.
+        self.distance_matrix = None # matrix representing the fastest path distances between nodes.
+        self.path_matrix = None # matrix the entry [i][j] represents the next node to go to when going from i to j in the fastest path.
+
         pass
 
     def do_action(self, action: np.darray):
