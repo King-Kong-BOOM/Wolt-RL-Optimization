@@ -69,7 +69,7 @@ class Graph:
     Class representing the graph structure of the problem domain.
     """
 
-    def __init__(self, num_nodes: int = None, num_edges: int = None, num_drivers: int = None,
+    def __init__(self, num_nodes: int = 6, num_edges: int = 7, num_drivers: int = None,
                  order_distribution: callable = None, density: float = None, density_noise: float = None):
         """
         Initalizes the Graph object. The graph should be connected and look somewhat reasonable in 2d space
@@ -95,6 +95,28 @@ class Graph:
         self.nodes = [Node(i, self, 0.1 if self.order_distribution is None else self.order_distribution(i)) for i in range(self.num_nodes)]
         #all the matrices most likely should be np.darrays 
         self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32) # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
+
+        # just temp implementation for testing frontend
+        self.edges[0, 1] = 1
+        self.edges[1, 0] = 1
+
+        self.edges[2, 4] = 3
+        self.edges[4, 2] = 3
+
+        self.edges[5, 1] = 4
+        self.edges[1, 5] = 4
+
+        self.edges[3, 2] = 2
+        self.edges[2, 3] = 2
+
+        self.edges[4, 1] = 1
+        self.edges[1, 4] = 1
+
+        self.edges[5, 3] = 3
+        self.edges[3, 5] = 3
+
+        self.edges[0, 5] = 2
+        self.edges[5, 0] = 2
         
 
     def precompute_matrices(self):
