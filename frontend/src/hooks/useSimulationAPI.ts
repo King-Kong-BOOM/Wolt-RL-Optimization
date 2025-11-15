@@ -23,10 +23,12 @@ interface UseSimulationAPIResult {
   isPaused: boolean;
   trainingState: TrainingState;
   error: string | null;
+  speed: number;
   createSimulation: (hyperparameters: Hyperparameters) => Promise<void>;
   trainAgent: (timesteps: number) => Promise<void>;
   pauseSimulation: () => Promise<void>;
   resumeSimulation: () => Promise<void>;
+  setSpeed: (speed: number) => Promise<void>;
   clearError: () => void;
   fetchInitialRenderData: () => Promise<void>;
 }
@@ -39,6 +41,7 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     isTraining: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const [speed, setSpeedState] = useState<number>(1.0);
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
@@ -248,13 +251,48 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     }
   }, []);
 
+  const setSpeed = useCallback(async (newSpeed: number) => {
+    try {
+      setError(null);
+      if (newSpeed <= 0) {
+        setError('Speed must be greater than 0');
+        return;
+      }
+      
+      const response = await axios.post<APIResponse>(
+        `${API_BASE_URL}/api/simulation/speed`,
+        { speed: newSpeed }
+      );
+
+      if (response.data.success) {
+        setSpeedState(newSpeed);
+      } else {
+        setError(response.data.message || 'Failed to set speed');
+      }
+    } catch (err) {
+      console.error('Error setting speed:', err);
+      setError(axios.isAxiosError(err) ? err.message : 'Failed to set speed');
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // Fetch initial render data on mount
+  // Fetch initial render data and speed on mount
   useEffect(() => {
     fetchInitialRenderData();
+    
+    // Fetch current speed
+    axios.get<APIResponse>(`${API_BASE_URL}/api/simulation/speed`)
+      .then(response => {
+        if (response.data.success && 'speed' in response.data) {
+          setSpeedState(response.data.speed as number);
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching speed:', err);
+      });
   }, [fetchInitialRenderData]);
 
   return {
@@ -263,10 +301,12 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     isPaused,
     trainingState,
     error,
+    speed,
     createSimulation,
     trainAgent,
     pauseSimulation,
     resumeSimulation,
+    setSpeed,
     clearError,
     fetchInitialRenderData,
   };

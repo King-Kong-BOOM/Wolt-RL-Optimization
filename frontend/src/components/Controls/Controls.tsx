@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSimulationAPI } from '../../hooks/useSimulationAPI';
 import type { Hyperparameters } from '../../types';
 import HyperparametersForm from './HyperparametersForm';
@@ -27,6 +27,8 @@ export default function Controls({
     trainingState,
     error,
     clearError,
+    speed,
+    setSpeed,
   } = useSimulationAPI();
 
   const [hyperparameters, setHyperparameters] = useState<Hyperparameters>({
@@ -37,6 +39,7 @@ export default function Controls({
   });
 
   const [trainTimesteps, setTrainTimesteps] = useState<number>(100);
+  const [speedInput, setSpeedInput] = useState<number>(1.0);
 
   const handleCreateGraph = async () => {
     // Validate that num_edges >= num_nodes - 1 (minimum for connected graph)
@@ -62,6 +65,11 @@ export default function Controls({
   const handleTrain = async () => {
     await trainAgent(trainTimesteps);
   };
+
+  // Sync speed input with current speed when it changes
+  useEffect(() => {
+    setSpeedInput(speed);
+  }, [speed]);
 
   return (
     <div className="controls-container">
@@ -137,6 +145,33 @@ export default function Controls({
           Training in progress... (Timesteps: {trainingState.startTimestep || 'N/A'})
         </div>
       )}
+
+      <div className="speed-control-section">
+        <label htmlFor="speed-input">Simulation Speed (timesteps/sec):</label>
+        <div className="speed-control">
+          <input
+            id="speed-input"
+            type="number"
+            value={speedInput}
+            onChange={(e) => setSpeedInput(parseFloat(e.target.value) || 1.0)}
+            min={0.1}
+            max={10}
+            step={0.1}
+            disabled={trainingState.isTraining}
+            className="speed-input"
+          />
+          <button
+            onClick={() => setSpeed(speedInput)}
+            disabled={!isConnected || trainingState.isTraining}
+            className="control-button"
+          >
+            Set Speed
+          </button>
+        </div>
+        <div className="speed-display">
+          Current: {speed.toFixed(1)} timesteps/sec
+        </div>
+      </div>
 
       <HyperparametersForm
         hyperparameters={hyperparameters}

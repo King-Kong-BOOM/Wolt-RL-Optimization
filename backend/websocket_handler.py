@@ -13,6 +13,7 @@ simulation_running = False
 socketio_instance = None
 is_training = False  # Flag to track training mode
 training_update_counter = 0  # Counter for reduced updates during training
+simulation_speed = 1.0  # Timesteps per second (default: 1 timestep per second)
 
 def set_app_state(state):
     """Set the global app state instance."""
@@ -46,9 +47,21 @@ def send_state_update():
     except Exception as e:
         print(f"Error sending state update: {e}")
 
-def start_simulation_loop(update_interval=0.1):
+def set_simulation_speed(speed: float):
+    """Set the simulation speed (timesteps per second)."""
+    global simulation_speed
+    if speed > 0:
+        simulation_speed = float(speed)
+    else:
+        simulation_speed = 0.1  # Minimum speed
+
+def get_simulation_speed() -> float:
+    """Get the current simulation speed."""
+    return simulation_speed
+
+def start_simulation_loop():
     """Start the simulation loop that sends periodic updates."""
-    global simulation_running, app_state
+    global simulation_running, app_state, simulation_speed
     
     if simulation_running:
         return  # Already running
@@ -56,12 +69,19 @@ def start_simulation_loop(update_interval=0.1):
     simulation_running = True
     
     def loop():
+        global simulation_speed
         while simulation_running:
             if app_state and app_state.graph:
                 # Advance simulation by one step
                 app_state.time_step()
                 # Send state update to all clients
                 send_state_update()
+            
+            # Calculate sleep interval based on speed (timesteps per second)
+            # If speed is 1.0, we want 1 timestep per second, so sleep 1.0 second
+            # If speed is 2.0, we want 2 timesteps per second, so sleep 0.5 seconds
+            # If speed is 0.5, we want 0.5 timesteps per second, so sleep 2.0 seconds
+            update_interval = 1.0 / simulation_speed if simulation_speed > 0 else 1.0
             time.sleep(update_interval)
     
     global simulation_thread

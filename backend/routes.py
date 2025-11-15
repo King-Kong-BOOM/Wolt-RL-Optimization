@@ -115,8 +115,11 @@ def create_simulation():
         
         # Update global app state reference
         set_app_state(app_state)
-        from websocket_handler import set_app_state as set_ws_app_state
+        from websocket_handler import set_app_state as set_ws_app_state, start_simulation_loop
         set_ws_app_state(app_state)
+        
+        # Start the simulation loop
+        start_simulation_loop()
         
         return jsonify({
             "success": True,
@@ -209,8 +212,8 @@ def pause_simulation():
                 "message": "No simulation available"
             }), 404
         
-        # TODO: Implement pause logic
-        # For now, just acknowledge the request
+        from websocket_handler import stop_simulation_loop
+        stop_simulation_loop()
         
         return jsonify({
             "success": True,
@@ -236,8 +239,8 @@ def resume_simulation():
                 "message": "No simulation available"
             }), 404
         
-        # TODO: Implement resume logic
-        # For now, just acknowledge the request
+        from websocket_handler import start_simulation_loop
+        start_simulation_loop()
         
         return jsonify({
             "success": True,
@@ -247,6 +250,64 @@ def resume_simulation():
         return jsonify({
             "success": False,
             "message": f"Error resuming simulation: {str(e)}"
+        }), 500
+
+@routes.route('/api/simulation/speed', methods=['POST'])
+def set_speed():
+    """
+    HTTP POST endpoint for setting the simulation speed (timesteps per second).
+    """
+    try:
+        data = request.get_json()
+        if not data or 'speed' not in data:
+            return jsonify({
+                "success": False,
+                "message": "Missing speed in request"
+            }), 400
+        
+        speed = float(data['speed'])
+        if speed <= 0:
+            return jsonify({
+                "success": False,
+                "message": "Speed must be greater than 0"
+            }), 400
+        
+        from websocket_handler import set_simulation_speed
+        set_simulation_speed(speed)
+        
+        return jsonify({
+            "success": True,
+            "message": f"Simulation speed set to {speed} timesteps per second",
+            "speed": speed
+        })
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Invalid speed value. Must be a number."
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error setting speed: {str(e)}"
+        }), 500
+
+@routes.route('/api/simulation/speed', methods=['GET'])
+def get_speed():
+    """
+    HTTP GET endpoint for getting the current simulation speed.
+    """
+    try:
+        from websocket_handler import get_simulation_speed
+        speed = get_simulation_speed()
+        
+        return jsonify({
+            "success": True,
+            "speed": speed
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error getting speed: {str(e)}"
         }), 500
 
 # TODO: Future endpoint for computing driver paths on-demand (e.g., for mouse hover)
