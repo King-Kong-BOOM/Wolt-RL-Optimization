@@ -1,6 +1,28 @@
 import numpy as np
 import random
 
+class Driver:
+    """
+    Represents a single driver in the system. A driver has a current location (node), a list of assigned orders, and possibly
+    other attributes such as time to next node, etc.
+    """
+
+    def __init__(self, driver_id: int, current_node: int):
+        self.driver_id = driver_id
+        self.current_node = current_node
+        self.delay = 0  # time steps until the driver reaches the next node
+
+    def time_step(self):
+        """
+        Advances the driver state by one time step. This may involve moving to the next node, picking up or dropping off orders, etc.
+        """
+
+        if self.delay > 0:
+            self.delay -= 1
+        else:
+            # Driver is at a node and can take action (pick up/drop off/move)
+            pass
+
 class Order:
     
     """
