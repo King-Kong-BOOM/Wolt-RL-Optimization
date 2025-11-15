@@ -93,8 +93,8 @@ class Graph:
         """
         # the node_id of each node is just its index in the self.nodes list
         self.nodes = [Node(i, self, 0.1 if self.order_distribution is None else self.order_distribution(i)) for i in range(self.num_nodes)]
-        #all the matrices most likely should be np.darrays
-        self.edges = np.zeros((self.num_nodes, self.num_nodes)) # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
+        #all the matrices most likely should be np.darrays 
+        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32) # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
         
 
     def precompute_matrices(self):
