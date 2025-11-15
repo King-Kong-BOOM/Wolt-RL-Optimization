@@ -3,28 +3,6 @@ import random
 import heapq
 from collections import deque
 
-class Driver:
-    """
-    Represents a single driver in the system. A driver has a current location (node), a list of assigned orders, and possibly
-    other attributes such as time to next node, etc.
-    """
-
-    def __init__(self, driver_id: int, current_node: int):
-        self.driver_id = driver_id
-        self.current_node = current_node
-        self.delay = 0  # time steps until the driver reaches the next node
-
-    def time_step(self):
-        """
-        Advances the driver state by one time step. This may involve moving to the next node, picking up or dropping off orders, etc.
-        """
-
-        if self.delay > 0:
-            self.delay -= 1
-        else:
-            # Driver is at a node and can take action (pick up/drop off/move)
-            pass
-
 class Order:
     
     """
@@ -157,33 +135,7 @@ def ensure_connected(edges, pts, num_nodes):
     
     return edge_set
 
-
-class Node:
-    """
-    Represents a single node in the graph. Node represents a location in the physical area. Each node can create orders
-    or have orders to be picked up from it. It is assumed that nodes never create orders from a -> b where a and b are not the same
-    location.
-    """
-
-    def __init__(self, node_id: int, graph, order_distribution: float = None):
-        self.node_id = node_id
-        self.graph = graph
-        self.order_distribution = order_distribution
-
-    def create_order(self):
-        """
-        Creates a new order at this node based on the order distribution function.
-        """
-        pass
-
-    def time_step(self):
-        """
-        Advances the node state by one time step. This may involve generating new orders, updating existing orders, etc.
-        """
-
-        if random.random() < self.order_distribution:
-            self.create_order()
-            
+           
 class Graph:
     """
     Class representing the graph structure of the problem domain.
@@ -219,6 +171,10 @@ class Graph:
         
         pass
 
+        @staticmethod
+        def node_f():
+            return random.uniform(0.002,0.1)
+
     def create_graph(self):
         """
             Function for creating the graph itself using the contructors parameters. 
@@ -248,7 +204,7 @@ class Graph:
         self.node_positions = pts
         
         # Create nodes
-        self.nodes = [Node(i, self, 0.1 if self.order_distribution is None else self.order_distribution(i)) for i in range(self.num_nodes)]
+        self.nodes = [self.node_f() for i in range(self.num_nodes)]
         
         # Initialize adjacency matrix
         self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
@@ -550,3 +506,26 @@ class Graph:
         # Placeholder: Will use path_matrix when available
         # For now, return empty list
         return []
+
+class Driver:
+    """
+    Represents a single driver in the system. A driver has a current location (node), a list of assigned orders, and possibly
+    other attributes such as time to next node, etc.
+    """
+
+    def __init__(self, driver_id: int, current_node: int, graph: Graph):
+        self.driver_id = driver_id
+        self.current_node = current_node
+        self.delay = 0  # time steps until the driver reaches the next node
+        self.graph = graph
+        
+    def time_step(self):
+        """
+        Advances the driver state by one time step. This may involve moving to the next node, picking up or dropping off orders, etc.
+        """
+
+        if self.delay > 0:
+            self.delay -= 1
+        else:
+            # Driver is at a node and can take action (pick up/drop off/move)
+            pass
