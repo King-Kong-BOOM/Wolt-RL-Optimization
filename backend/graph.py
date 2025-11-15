@@ -10,8 +10,11 @@ class Order:
     such as time created, time to deliver, etc.
     """
 
-    def __init__(self, order_id: int, pickup_node: int, dropoff_node: int, time_created: int):
-        self.order_id = order_id
+    current_id = 0
+
+    def __init__(self, pickup_node: int, dropoff_node: int, time_created: int):
+        self.order_id = Order.current_id
+        Order.current_id += 1
         self.pickup_node = pickup_node
         self.dropoff_node = dropoff_node
         self.time_created = time_created
@@ -169,11 +172,12 @@ class Graph:
         self.create_graph()
         self.precompute_matrices()
         
-        pass
+        self.amount_of_orders = self.num_nodes * [0]
+        self.drivers_orders = self.num_drivers * [0]
 
-        @staticmethod
-        def node_f():
-            return random.uniform(0.002,0.1)
+    @staticmethod
+    def node_f():
+        return random.uniform(0.002,0.1)
 
     def create_graph(self):
         """
@@ -354,22 +358,14 @@ class Graph:
         """
         self.timestep += 1
         
-        # Update all nodes
-        for node in self.nodes:
-            node.time_step()
-        
-        # Update all drivers
+        for i, node in enumerate(self.nodes):
+            if random.random() < node and self.amount_of_orders[i] < 3:
+                self.orders.append(Order(i, random.choice([j for j in range(self.num_nodes) if j != i]), self.timestep))
+                self.amount_of_orders[i] += 1
+
+        # Update all drivers and orders
         for driver in self.drivers:
             driver.time_step()
-        
-        pass
-
-    def add_order(self, order: Order):
-        """
-        Adds a new order to the graph.
-        """
-        pass
-
 
     def get_render_data(self) -> dict:
         """
@@ -381,7 +377,7 @@ class Graph:
         """
         # Convert nodes to frontend format
         nodes = []
-        for i, node in enumerate(self.nodes):
+        for i, node in self.nodes:
             # Use stored positions if available, scaled to reasonable pixel coordinates (800x600 default)
             if self.node_positions is not None and len(self.node_positions.shape) == 2 and i < self.node_positions.shape[0]:
                 # Scale from [0,1] to pixel coordinates (800x600 canvas)
@@ -393,12 +389,12 @@ class Graph:
                 y = 0.0
             
             nodes.append({
-                "id": str(node.node_id),
+                "id": str(i),
                 "position": {"x": x, "y": y},
                 "data": {
                     "type": "location",
-                    "label": f"Id: {node.node_id}",
-                    "order_probability": float(node.order_distribution) if node.order_distribution is not None else 0.0
+                    "label": f"Id: {i}",
+                    "order_probability": node if node is not None else 0.0
                 }
             })
         
@@ -474,7 +470,7 @@ class Graph:
         """
         Returns a representation of the graph suitable for input to the optimizer.
         """
-        pass
+        return ()
 
     def compute_driver_path(self, driver_id: int, target_node: int) -> list:
         """
@@ -513,12 +509,17 @@ class Driver:
     other attributes such as time to next node, etc.
     """
 
+    current_id = 0
+
     def __init__(self, driver_id: int, current_node: int, graph: Graph):
         self.driver_id = driver_id
         self.current_node = current_node
         self.delay = 0  # time steps until the driver reaches the next node
         self.graph = graph
-        
+        self.order: Order = None
+        self.id = Driver.current_id
+        Driver.current_id += 1
+
     def time_step(self):
         """
         Advances the driver state by one time step. This may involve moving to the next node, picking up or dropping off orders, etc.
@@ -527,5 +528,22 @@ class Driver:
         if self.delay > 0:
             self.delay -= 1
         else:
-            # Driver is at a node and can take action (pick up/drop off/move)
-            pass
+            if self.order.is_picked_up and not self.order.is_delivered:
+                # Move towards dropoff node
+                next_node = self.graph.path_matrix[self.current_node, self.order.dropoff_node]
+                if next_node != -1:
+                    travel_time = self.graph.edges[self.current_node, next_node]
+                    self.delay = travel_time - 1  # Subtract 1 since we move this timestep
+                    self.current_node = next_node
+                    if self.current_node == self.order.dropoff_node:
+                        self.order.is_delivered = True
+                        self.graph.drivers_orders[self.id] -= 1
+            elif not self.order.is_picked_up:
+                # Move towards pickup node
+                next_node = self.graph.path_matrix[self.current_node, self.order.pickup_node]
+                if next_node != -1:
+                    travel_time = self.graph.edges[self.current_node, next_node]
+                    self.delay = travel_time - 1  # Subtract 1 since we move this timestep
+                    self.current_node = next_node
+                    if self.current_node == self.order.pickup_node:
+                        self.order.is_picked_up = True
