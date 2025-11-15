@@ -12,12 +12,23 @@ def create_app():
     app.register_blueprint(routes)
     
     # Initialize app state with a default graph
-    graph = Graph(num_nodes=6, num_edges=7, num_drivers=2)
-    app_state = AppState(graph=graph)
-    
-    # Set app state in routes and websocket handler
-    set_app_state(app_state)
-    set_ws_app_state(app_state)
+    try:
+        graph = Graph(num_nodes=6, num_edges=7, num_drivers=2)
+        app_state = AppState(graph=graph)
+        
+        # Set app state in routes and websocket handler
+        set_app_state(app_state)
+        set_ws_app_state(app_state)
+        
+        print(f"Server initialized with graph: {graph.num_nodes} nodes, {len(graph.drivers)} drivers")
+    except Exception as e:
+        print(f"Error initializing app state: {e}")
+        import traceback
+        traceback.print_exc()
+        # Create empty app state to prevent crashes
+        app_state = AppState(graph=None)
+        set_app_state(app_state)
+        set_ws_app_state(app_state)
     
     return app, app_state
 

@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import heapq
+from collections import deque
 
 class Driver:
     """
@@ -39,6 +40,124 @@ class Order:
         self.is_picked_up = False
         self.is_delivered = False
 
+def create_density_field(grid_size=(100, 100), num_blobs=6, seed=None):
+    """
+    Create a normalized 2D density field on [0,1]^2 as a mixture of Gaussian blobs.
+    Returns a (H, W) numpy array with sum = 1.
+    """
+    if seed is not None:
+        rs = np.random.RandomState(seed)
+    else:
+        rs = np.random
+
+    H, W = grid_size
+    ys = np.linspace(0.0, 1.0, H)
+    xs = np.linspace(0.0, 1.0, W)
+    X, Y = np.meshgrid(xs, ys)
+    density = np.zeros_like(X, dtype=float)
+
+    for _ in range(num_blobs):
+        cx = rs.rand()
+        cy = rs.rand()
+        amp = 0.3 + rs.rand() * 1.7
+        sx = 0.03 + rs.rand() * 0.18
+        sy = 0.03 + rs.rand() * 0.18
+        blob = amp * np.exp(-(((X - cx) ** 2) / (2 * sx * sx) + ((Y - cy) ** 2) / (2 * sy * sy)))
+        density += blob
+
+    density = np.clip(density, 0.0, None)
+    s = density.sum()
+    if s <= 0:
+        density[:] = 1.0 / (H * W)
+    else:
+        density /= s
+    return density
+
+
+def sample_points_from_density(density, n_points, seed=None):
+    """
+    Sample n_points positions in [0,1]^2 according to discrete density (with jitter inside cell).
+    Returns numpy array shape (n_points, 2).
+    """
+    rs = np.random.RandomState(seed)
+    H, W = density.shape
+    probs = density.ravel()
+    probs = probs / probs.sum()
+    idx = rs.choice(H * W, size=n_points, replace=True, p=probs)
+    rows = idx // W
+    cols = idx % W
+    ys = (rows + rs.rand(n_points)) / float(H - 1)
+    xs = (cols + rs.rand(n_points)) / float(W - 1)
+    pts = np.vstack([xs, ys]).T
+    return pts
+
+
+def ensure_connected(edges, pts, num_nodes):
+    """
+    If graph is disconnected, add minimum edges to connect all components.
+    Connects components by shortest distance between their nodes.
+    Returns updated edge set.
+    """
+    # Build adjacency list to check connectivity
+    adj_list = {i: set() for i in range(num_nodes)}
+    for (a, b) in edges:
+        adj_list[a].add(b)
+        adj_list[b].add(a)
+    
+    # Find connected components using BFS
+    visited = set()
+    components = []
+    
+    for start in range(num_nodes):
+        if start in visited:
+            continue
+        
+        component = set()
+        queue = deque([start])
+        visited.add(start)
+        component.add(start)
+        
+        while queue:
+            node = queue.popleft()
+            for neighbor in adj_list[node]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    component.add(neighbor)
+                    queue.append(neighbor)
+        
+        components.append(component)
+    
+    # If already connected, return edges as is
+    if len(components) <= 1:
+        return edges
+    
+    # Connect components by finding closest pairs
+    # edges is already a set, but ensure we have a mutable copy
+    edge_set = set(edges) if not isinstance(edges, set) else edges.copy()
+    while len(components) > 1:
+        comp_a = components.pop(0)
+        comp_b = components.pop(0)
+        
+        min_dist = float('inf')
+        best_edge = None
+        
+        for i in comp_a:
+            for j in comp_b:
+                dist = np.sqrt((pts[i, 0] - pts[j, 0])**2 + (pts[i, 1] - pts[j, 1])**2)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_edge = (min(i, j), max(i, j))
+        
+        if best_edge:
+            edge_set.add(best_edge)
+        
+        # Merge components
+        merged = comp_a | comp_b
+        components.append(merged)
+    
+    return edge_set
+
+
 class Node:
     """
     Represents a single node in the graph. Node represents a location in the physical area. Each node can create orders
@@ -71,21 +190,29 @@ class Graph:
     """
 
     def __init__(self, num_nodes: int = 6, num_edges: int = 7, num_drivers: int = None,
-                 order_distribution: callable = None, density: float = None, density_noise: float = None):
+                 order_distribution: callable = None, density: float = None, density_noise: float = None, 
+                 seed: int = None, order_distribution_type: str = 'mixture'):
         """
         Initalizes the Graph object. The graph should be connected and look somewhat reasonable in 2d space
         since it represents a physical area where drivers and orders are located.
+        
+        Args:
+            order_distribution_type: 'mixture' or 'uniform' - determines how node positions are sampled
+            seed: Random seed for reproducibility
         """
 
         self.num_nodes = num_nodes
         self.num_edges = num_edges
         self.num_drivers = num_drivers
         self.order_distribution = order_distribution
+        self.seed = seed
+        self.order_distribution_type = order_distribution_type if order_distribution_type else 'mixture'
         
         # Tracking attributes for simulation state
         self.timestep = 0
         self.drivers = []
         self.orders = []
+        self.node_positions = None  # Will store 2D positions (num_nodes, 2) in [0,1] range
 
         self.create_graph()
         self.precompute_matrices()
@@ -94,35 +221,87 @@ class Graph:
 
     def create_graph(self):
         """
-            Function for creating the graph itself using the contructors parameters. Implemented as its own method
-            for more readability
+            Function for creating the graph itself using the contructors parameters. 
+            Uses geometric graph creation with 2D positions.
         """
-        # the node_id of each node is just its index in the self.nodes list
+        if self.num_nodes <= 0:
+            self.nodes = []
+            self.edges = np.zeros((0, 0), dtype=np.int32)
+            self.node_positions = np.zeros((0, 2))
+            return
+        
+        # Initialize random state
+        rs = np.random.RandomState(self.seed)
+        
+        # Sample node positions
+        num_blobs = self.num_nodes // 10 + 2
+        grid_size = (100, 100)
+        
+        if self.order_distribution_type == 'uniform':
+            pts = rs.rand(self.num_nodes, 2)
+        else:
+            # Use mixture density
+            density = create_density_field(grid_size=grid_size, num_blobs=num_blobs, seed=self.seed)
+            pts = sample_points_from_density(density, self.num_nodes, seed=self.seed)
+        
+        # Store node positions in [0,1] range
+        self.node_positions = pts
+        
+        # Create nodes
         self.nodes = [Node(i, self, 0.1 if self.order_distribution is None else self.order_distribution(i)) for i in range(self.num_nodes)]
-        #all the matrices most likely should be np.darrays 
-        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32) # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
-
-        # just temp implementation for testing frontend
-        self.edges[0, 1] = 1
-        self.edges[1, 0] = 1
-
-        self.edges[2, 4] = 3
-        self.edges[4, 2] = 3
-
-        self.edges[5, 1] = 4
-        self.edges[1, 5] = 4
-
-        self.edges[3, 2] = 2
-        self.edges[2, 3] = 2
-
-        self.edges[4, 1] = 1
-        self.edges[1, 4] = 1
-
-        self.edges[5, 3] = 3
-        self.edges[3, 5] = 3
-
-        self.edges[0, 5] = 2
-        self.edges[5, 0] = 2
+        
+        # Initialize adjacency matrix
+        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
+        
+        if self.num_nodes < 2 or self.num_edges <= 0:
+            # Initialize drivers if num_drivers is provided
+            if self.num_drivers is not None and self.num_drivers > 0:
+                for i in range(self.num_drivers):
+                    node_id = i % self.num_nodes
+                    driver = Driver(i, node_id)
+                    self.drivers.append(driver)
+            return
+        
+        # Create edges using k-nearest neighbors approach
+        edge_set = set()
+        
+        for i in range(self.num_nodes):
+            # Each node gets a random k between 2 and sqrt(num_nodes)
+            k = rs.randint(2, max(3, int(np.sqrt(self.num_nodes)) + 1))
+            
+            dists_from_i = np.sqrt((pts[i, 0] - pts[:, 0])**2 + (pts[i, 1] - pts[:, 1])**2)
+            nearest_k = np.argsort(dists_from_i)[1:k+1]  # exclude self
+            
+            for j in nearest_k:
+                edge_set.add((min(i, j), max(i, j)))
+        
+        # Randomly remove a fraction of k-nearest edges
+        removal_fraction = 0.35
+        edge_list_temp = list(edge_set)
+        if len(edge_list_temp) > 0:
+            edges_to_remove = rs.choice(len(edge_list_temp), 
+                                       size=max(0, int(len(edge_list_temp) * removal_fraction)), 
+                                       replace=False)
+            edge_set = edge_set - set([edge_list_temp[i] for i in edges_to_remove])
+        
+        # Add random long-distance edges
+        num_random_edges = max(1, int(len(edge_set) * 0.10))
+        for _ in range(num_random_edges):
+            i = rs.randint(0, self.num_nodes)
+            j = rs.randint(0, self.num_nodes)
+            if i != j:
+                edge_set.add((min(i, j), max(i, j)))
+        
+        # Ensure graph is connected
+        edge_set = ensure_connected(edge_set, pts, self.num_nodes)
+        
+        # Add edges to adjacency matrix with weights (Euclidean distance)
+        for a, b in edge_set:
+            w = np.sqrt((pts[a, 0] - pts[b, 0])**2 + (pts[a, 1] - pts[b, 1])**2)
+            # Round to integer and ensure at least 1
+            weight = max(1, int(np.round(w * 10)))  # Scale by 10 to get reasonable integer weights
+            self.edges[a, b] = weight
+            self.edges[b, a] = weight
         
         # Initialize drivers if num_drivers is provided
         if self.num_drivers is not None and self.num_drivers > 0:
@@ -246,13 +425,23 @@ class Graph:
         """
         # Convert nodes to frontend format
         nodes = []
-        for node in self.nodes:
+        for i, node in enumerate(self.nodes):
+            # Use stored positions if available, scaled to reasonable pixel coordinates (800x600 default)
+            if self.node_positions is not None and len(self.node_positions.shape) == 2 and i < self.node_positions.shape[0]:
+                # Scale from [0,1] to pixel coordinates (800x600 canvas)
+                x = float(self.node_positions[i, 0] * 800)
+                y = float(self.node_positions[i, 1] * 600)
+            else:
+                # Fallback to 0,0 if positions not available
+                x = 0.0
+                y = 0.0
+            
             nodes.append({
                 "id": str(node.node_id),
-                "position": {"x": 0, "y": 0},  # Frontend will calculate layout
+                "position": {"x": x, "y": y},
                 "data": {
                     "type": "location",
-                    "label": f"Node {node.node_id}",
+                    "label": f"Id: {node.node_id}",
                     "order_probability": float(node.order_distribution) if node.order_distribution is not None else 0.0
                 }
             })

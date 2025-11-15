@@ -58,6 +58,10 @@ def get_render_data():
             "data": render_data
         })
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error getting render data: {str(e)}")
+        print(error_trace)
         return jsonify({
             "success": False,
             "message": f"Error getting render data: {str(e)}"
@@ -119,6 +123,10 @@ def create_simulation():
             "message": "Simulation created successfully"
         })
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error creating simulation: {str(e)}")
+        print(error_trace)
         return jsonify({
             "success": False,
             "message": f"Error creating simulation: {str(e)}"

@@ -96,8 +96,54 @@ export function calculateForceDirectedLayout(
   const temperature = Math.min(width, height) / 10;
   let currentTemp = temperature;
   
-  // Initialize positions if not set
-  const positionedNodes = nodes.map((node, i) => {
+  // Check if nodes have valid positions from backend
+  const hasValidPositions = nodes.length > 0 && nodes.some(node => 
+    node.position && (node.position.x !== 0 || node.position.y !== 0)
+  );
+  
+  // If positions are provided from backend, scale them to canvas dimensions
+  let positionedNodes: GraphNode[];
+  if (hasValidPositions) {
+    // Scale positions from backend coordinates (800x600) to actual canvas size
+    // Apply spacing factor (1.3x) to spread nodes further apart
+    const spacingFactor = 1.3;
+    const baseScaleX = width / 800;
+    const baseScaleY = height / 600;
+    const scaleX = baseScaleX * spacingFactor;
+    const scaleY = baseScaleY * spacingFactor;
+    
+    // Calculate center offset to keep nodes centered after scaling
+    // After scaling by spacingFactor, we need to shift back to center
+    const centerOffsetX = (width - 800 * scaleX) / 2;
+    const centerOffsetY = (height - 600 * scaleY) / 2;
+    
+    positionedNodes = nodes.map((node) => {
+      if (node.position && (node.position.x !== 0 || node.position.y !== 0)) {
+        return {
+          ...node,
+          position: {
+            x: node.position.x * scaleX + centerOffsetX,
+            y: node.position.y * scaleY + centerOffsetY,
+          },
+        };
+      }
+      // Fallback for nodes without positions
+      const angle = (2 * Math.PI * parseInt(node.id)) / nodes.length;
+      return {
+        ...node,
+        position: {
+          x: width / 2 + (Math.min(width, height) / 3) * Math.cos(angle),
+          y: height / 2 + (Math.min(width, height) / 3) * Math.sin(angle),
+        },
+      };
+    });
+    
+    // Return nodes with scaled positions (skip force-directed layout)
+    return positionedNodes;
+  }
+  
+  // Initialize positions if not set (fallback to force-directed layout)
+  positionedNodes = nodes.map((node, i) => {
     if (!node.position || (node.position.x === 0 && node.position.y === 0)) {
       // Distribute nodes in a circle initially
       const angle = (2 * Math.PI * i) / nodes.length;

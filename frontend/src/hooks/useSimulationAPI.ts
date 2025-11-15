@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { io, Socket } from 'socket.io-client';
 import type {
   SimulationState,
   WebSocketMessage,
@@ -12,7 +13,9 @@ import type {
 
 // Use relative URLs to leverage Vite proxy, or fall back to direct URL if VITE_API_URL is set
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000/ws';
+// Socket.IO will automatically append /socket.io/ to the base URL
+// Use relative URL to leverage Vite proxy, or direct URL as fallback
+const WS_URL = import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? '' : 'http://localhost:5000');
 
 interface UseSimulationAPIResult {
   state: SimulationState | null;
@@ -36,27 +39,42 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     isTraining: false,
   });
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
 
   const connectWebSocket = useCallback(() => {
     try {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+      // Disconnect existing socket if any
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
 
-      ws.onopen = () => {
-        console.log('WebSocket connected');
+      // Create Socket.IO connection
+      const socket = io(WS_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+      });
+      
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        console.log('Socket.IO connected');
         setIsConnected(true);
         setError(null);
         reconnectAttempts.current = 0;
-      };
+        
+        // Request initial state
+        socket.emit('request_state');
+      });
 
-      ws.onmessage = (event) => {
+      socket.on('state_update', (message: WebSocketMessage) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          
           if (message.type === 'state_update') {
             if (message.mode === 'simulation' && !trainingState.isTraining) {
               // Only update state during simulation, not during training
@@ -83,36 +101,36 @@ export function useSimulationAPI(): UseSimulationAPIResult {
             setError(message.data?.message || 'An error occurred');
           }
         } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
-          setError('Failed to parse server message');
+          console.error('Error processing Socket.IO message:', err);
+          setError('Failed to process server message');
         }
-      };
+      });
 
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
-        setError('WebSocket connection error');
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      socket.on('disconnect', (reason) => {
+        console.log('Socket.IO disconnected:', reason);
         setIsConnected(false);
-        wsRef.current = null;
-
-        // Attempt to reconnect
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          reconnectAttempts.current += 1;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`Attempting to reconnect (${reconnectAttempts.current}/${maxReconnectAttempts})...`);
-            connectWebSocket();
-          }, delay);
+        
+        // Only attempt manual reconnection if it wasn't intentional
+        if (reason === 'io server disconnect') {
+          // Server disconnected, don't reconnect automatically
+          setError('Server disconnected. Please refresh the page.');
+        } else if (reason === 'io client disconnect') {
+          // Client disconnected intentionally, don't reconnect
+          socketRef.current = null;
         } else {
-          setError('Failed to connect to server. Please refresh the page.');
+          // Connection lost, Socket.IO will attempt to reconnect automatically
+          // But we can track it here
+          socketRef.current = null;
         }
-      };
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('Socket.IO connection error:', err);
+        setError('Failed to connect to server');
+      });
     } catch (err) {
-      console.error('Error creating WebSocket:', err);
-      setError('Failed to create WebSocket connection');
+      console.error('Error creating Socket.IO connection:', err);
+      setError('Failed to create Socket.IO connection');
     }
   }, [state?.timestep, trainingState.isTraining]);
 
@@ -120,8 +138,9 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);

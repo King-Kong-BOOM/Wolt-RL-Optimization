@@ -26,9 +26,9 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   if (sourceNode) {
     // Try to get actual measured dimensions, fallback to default sizes
     const nodeWidth = sourceNode.measured?.width || sourceNode.width || 
-      (sourceNode.data?.type === 'driver' ? 60 : sourceNode.data?.type === 'task' ? 50 : 40);
+      (sourceNode.data?.type === 'driver' ? 45 : sourceNode.data?.type === 'task' ? 35 : 30);
     const nodeHeight = sourceNode.measured?.height || sourceNode.height || 
-      (sourceNode.data?.type === 'driver' ? 60 : sourceNode.data?.type === 'task' ? 50 : 40);
+      (sourceNode.data?.type === 'driver' ? 45 : sourceNode.data?.type === 'task' ? 35 : 30);
     
     centerSourceX = sourceNode.position.x + nodeWidth / 2;
     centerSourceY = sourceNode.position.y + nodeHeight / 2;
@@ -36,9 +36,9 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   
   if (targetNode) {
     const nodeWidth = targetNode.measured?.width || targetNode.width || 
-      (targetNode.data?.type === 'driver' ? 60 : targetNode.data?.type === 'task' ? 50 : 40);
+      (targetNode.data?.type === 'driver' ? 45 : targetNode.data?.type === 'task' ? 35 : 30);
     const nodeHeight = targetNode.measured?.height || targetNode.height || 
-      (targetNode.data?.type === 'driver' ? 60 : targetNode.data?.type === 'task' ? 50 : 40);
+      (targetNode.data?.type === 'driver' ? 45 : targetNode.data?.type === 'task' ? 35 : 30);
     
     centerTargetX = targetNode.position.x + nodeWidth / 2;
     centerTargetY = targetNode.position.y + nodeHeight / 2;
@@ -49,9 +49,9 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   const dy = centerTargetY - centerSourceY;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  // Node radius offset (average of typical node sizes: 20-30px radius)
-  // Using 25px as a reasonable average to ensure edges don't overlap nodes
-  const nodeRadius = 25;
+  // Node radius offset (average of typical node sizes: 15-22px radius)
+  // Using 18px as a reasonable average to ensure edges don't overlap nodes
+  const nodeRadius = 18;
   
   // Calculate offset points on node boundaries
   // Only offset if distance is greater than 2 * radius (nodes don't overlap)
@@ -59,8 +59,6 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   let startY = centerSourceY;
   let endX = centerTargetX;
   let endY = centerTargetY;
-  let controlX = (startX + endX) / 2;
-  let controlY = (startY + endY) / 2;
   
   if (distance > nodeRadius * 2 && distance > 0) {
     // Normalize direction vector
@@ -72,25 +70,15 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
     startY = centerSourceY + unitY * nodeRadius;
     endX = centerTargetX - unitX * nodeRadius;
     endY = centerTargetY - unitY * nodeRadius;
-    
-    // Calculate control point for quadratic bezier curve (slightly offset for curve)
-    const midX = (startX + endX) / 2;
-    const midY = (startY + endY) / 2;
-    
-    // Perpendicular offset for curve (perpendicular to the line direction)
-    const perpX = -dy / distance * 20; // 20px perpendicular offset
-    const perpY = dx / distance * 20;
-    controlX = midX + perpX;
-    controlY = midY + perpY;
   }
   
   const weight = data?.weight;
   const showWeight = data?.showWeight || false;
   const shouldShowWeight = showWeight || isHovered;
   
-  // Calculate position for weight label (midpoint of the curve)
-  const labelX = (startX + endX) / 2 + (controlX - (startX + endX) / 2) * 0.5;
-  const labelY = (startY + endY) / 2 + (controlY - (startY + endY) / 2) * 0.5;
+  // Calculate position for weight label (midpoint of the straight line)
+  const labelX = (startX + endX) / 2;
+  const labelY = (startY + endY) / 2;
 
   return (
     <g
@@ -98,7 +86,7 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
     >
       {/* Invisible wider path for easier hovering - positioned behind visible edge */}
       <path
-        d={`M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`}
+        d={`M ${startX} ${startY} L ${endX} ${endY}`}
         fill="none"
         stroke="transparent"
         strokeWidth="20"
@@ -106,10 +94,10 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
         onMouseLeave={() => setIsHovered(false)}
         style={{ pointerEvents: 'all' }}
       />
-      {/* Visible edge path */}
+      {/* Visible edge path - straight line */}
       <path
         id={id}
-        d={`M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`}
+        d={`M ${startX} ${startY} L ${endX} ${endY}`}
         fill="none"
         stroke={selected ? '#FFD93D' : '#94A3B8'}
         strokeWidth={selected ? 3 : 2}

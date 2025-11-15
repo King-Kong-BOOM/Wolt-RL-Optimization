@@ -65,11 +65,11 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
   const getNodeSize = () => {
     switch (nodeType) {
       case 'driver':
-        return { width: 60, height: 60 };
+        return { width: 45, height: 45 };
       case 'task':
-        return { width: 50, height: 50 };
+        return { width: 35, height: 35 };
       default:
-        return { width: 40, height: 40 };
+        return { width: 30, height: 30 };
     }
   };
 
@@ -119,7 +119,7 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
         alignItems: 'center',
         justifyContent: 'center',
         color: '#fff',
-        fontSize: '12px',
+        fontSize: '10px',
         fontWeight: 'bold',
         boxShadow: getBoxShadow(),
         position: 'relative',
@@ -138,8 +138,8 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
           {(orderProbability * 100).toFixed(0)}%
         </div>
       ) : data.label && (
-        <div style={{ textAlign: 'center', padding: '2px' }}>
-          {data.label.length > 4 ? data.label.substring(0, 4) : data.label}
+        <div style={{ textAlign: 'center', padding: '2px', fontSize: '9px' }}>
+          {data.label}
         </div>
       )}
       <Handle 
