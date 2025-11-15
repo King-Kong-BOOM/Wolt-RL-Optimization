@@ -51,15 +51,24 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
         fontWeight: 'bold',
         boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         position: 'relative',
+        zIndex: 10, // Ensure nodes render above edges
       }}
     >
-      <Handle type="target" position={Position.Top} />
+      <Handle 
+        type="target" 
+        position={Position.Center}
+        style={{ opacity: 0, width: 0, height: 0 }}
+      />
       {data.label && (
         <div style={{ textAlign: 'center', padding: '2px' }}>
           {data.label.length > 4 ? data.label.substring(0, 4) : data.label}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} />
+      <Handle 
+        type="source" 
+        position={Position.Center}
+        style={{ opacity: 0, width: 0, height: 0 }}
+      />
     </div>
   );
 }
