@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 class Order:
     
@@ -22,7 +23,7 @@ class Node:
     location.
     """
 
-    def __init__(self, node_id: int, graph, order_distribution: callable = None):
+    def __init__(self, node_id: int, graph, order_distribution: float = None):
         self.node_id = node_id
         self.graph = graph
         self.order_distribution = order_distribution
@@ -37,10 +38,10 @@ class Node:
         """
         Advances the node state by one time step. This may involve generating new orders, updating existing orders, etc.
         """
-        
-        if self.order_distribution:
-            pass
 
+        if random.random() < self.order_distribution:
+            self.create_order()
+            
 class Graph:
     """
     Class representing the graph structure of the problem domain.
