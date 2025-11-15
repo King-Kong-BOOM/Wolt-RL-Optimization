@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import heapq
 
 class Driver:
     """
@@ -134,13 +135,76 @@ class Graph:
 
     def precompute_matrices(self):
         """
-        Precomputes the distance and path matrices using djikstra's algorithm or similar.
+        Precomputes the distance and path matrices using Dijkstra's algorithm.
+        
+        distance_matrix[i, j] = shortest distance from node i to node j
+        path_matrix[i, j] = next node to visit when going from node i to node j (first step in shortest path)
         """
-
-        # can (and will) be both precomputed using djikstra starting from each node.
-        self.distance_matrix = None # matrix representing the fastest path distances between nodes.
-        self.path_matrix = None # matrix the entry [i][j] represents the next node to go to when going from i to j in the fastest path.
-
+        # Initialize matrices
+        self.distance_matrix = np.full((self.num_nodes, self.num_nodes), np.inf, dtype=np.float64)
+        self.path_matrix = np.full((self.num_nodes, self.num_nodes), -1, dtype=np.int32)
+        
+        # Run Dijkstra from each node as source
+        for source in range(self.num_nodes):
+            # Distance from source to all nodes
+            distances = np.full(self.num_nodes, np.inf, dtype=np.float64)
+            distances[source] = 0.0
+            
+            # Previous node in shortest path (for reconstructing first step)
+            previous = np.full(self.num_nodes, -1, dtype=np.int32)
+            
+            # Priority queue: (distance, node)
+            pq = [(0.0, source)]
+            visited = set()
+            
+            while pq:
+                current_dist, current = heapq.heappop(pq)
+                
+                # Skip if already visited with shorter distance
+                if current in visited:
+                    continue
+                
+                visited.add(current)
+                
+                # Update distance and path matrices
+                self.distance_matrix[source, current] = current_dist
+                
+                # Set path_matrix for source to current
+                if current == source:
+                    # Self-loop: path to self is self
+                    self.path_matrix[source, current] = current
+                elif previous[current] == source:
+                    # Direct neighbor: first step is the current node itself
+                    self.path_matrix[source, current] = current
+                else:
+                    # Not direct neighbor: trace back to find first step
+                    # The first step is the node immediately after source on the path
+                    node = current
+                    while previous[node] != source and previous[node] != -1:
+                        node = previous[node]
+                    # Now node is the first node after source on the path
+                    self.path_matrix[source, current] = node
+                
+                # Explore neighbors
+                for neighbor in range(self.num_nodes):
+                    if neighbor in visited:
+                        continue
+                    
+                    # Check if edge exists (weight > 0)
+                    edge_weight = self.edges[current, neighbor]
+                    if edge_weight > 0:
+                        new_dist = current_dist + edge_weight
+                        
+                        # If we found a shorter path
+                        if new_dist < distances[neighbor]:
+                            distances[neighbor] = new_dist
+                            previous[neighbor] = current
+                            
+                            # Add to priority queue
+                            heapq.heappush(pq, (new_dist, neighbor))
+        
+        # Convert distance_matrix to int32 if all values are integers (for consistency with edges)
+        # But keep as float64 to handle potential fractional weights in future
         pass
 
     def do_action(self, action: np.darray):
