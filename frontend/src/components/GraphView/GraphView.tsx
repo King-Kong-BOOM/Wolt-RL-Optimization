@@ -6,12 +6,15 @@ import ReactFlow, {
   NodeTypes,
   EdgeTypes,
   ReactFlowProvider,
+  useReactFlow,
+  Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useGraphLayout } from '../../hooks/useGraphLayout';
 import type { SimulationState } from '../../types';
 import GraphNode from './GraphNode';
 import GraphEdge from './GraphEdge';
+import DriverDot from './DriverDot';
 
 interface GraphViewProps {
   state: SimulationState | null;
@@ -35,10 +38,12 @@ const edgeTypes: EdgeTypes = {
   smoothstep: GraphEdge,
 };
 
-function GraphViewComponent({ state, width, height, showEdgeWeights = false, showProbabilities = false, selectedDriverId = null, selectedOrderId = null }: GraphViewProps) {
+function GraphViewComponentInner({ state, width, height, showEdgeWeights = false, showProbabilities = false, selectedDriverId = null, selectedOrderId = null }: GraphViewProps) {
   const reactFlowInstance = useRef<any>(null);
   const previousOrderIdsRef = useRef<Set<string>>(new Set());
   const [flashingNodes, setFlashingNodes] = useState<Set<string>>(new Set());
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const { getNode } = useReactFlow();
 
   const { reactFlowNodes: baseNodes, reactFlowEdges: baseEdges } = useGraphLayout(
     state?.nodes || [],
@@ -139,6 +144,44 @@ function GraphViewComponent({ state, width, height, showEdgeWeights = false, sho
 
   const onInit = useCallback((instance: any) => {
     reactFlowInstance.current = instance;
+    // Initialize viewport
+    if (instance) {
+      const vp = instance.getViewport();
+      setViewport(vp);
+    }
+  }, []);
+
+  // Track viewport changes for driver dot positioning
+  useEffect(() => {
+    if (reactFlowInstance.current) {
+      const updateViewport = () => {
+        const vp = reactFlowInstance.current?.getViewport();
+        if (vp) {
+          setViewport(vp);
+        }
+      };
+      
+      // Update viewport periodically to catch zoom/pan changes
+      const interval = setInterval(updateViewport, 16); // ~60fps
+      
+      return () => clearInterval(interval);
+    }
+  }, [reactFlowInstance.current]);
+
+  const onMove = useCallback((_event: any, viewport: any) => {
+    setViewport(viewport);
+  }, []);
+
+  const onMoveStart = useCallback((_event: any, viewport: any) => {
+    setViewport(viewport);
+  }, []);
+
+  const onMoveEnd = useCallback((_event: any, viewport: any) => {
+    setViewport(viewport);
+  }, []);
+
+  const onViewportChange = useCallback((viewport: any) => {
+    setViewport(viewport);
   }, []);
 
   // Fit view when new graph is loaded
@@ -163,14 +206,81 @@ function GraphViewComponent({ state, width, height, showEdgeWeights = false, sho
     }
   }, [selectedDriverLocationNodeId, selectedOrderLocationNodeId]);
 
+  // Calculate driver positions for rendering
+  const driverPositions = useMemo(() => {
+    if (!state?.drivers || !getNode) return [];
+    
+    return state.drivers.map(driver => {
+      const currentNodeId = driver.location;
+      const currentNode = getNode(currentNodeId);
+      
+      if (!currentNode) return null;
+      
+      // Get node center position
+      const getNodeCenter = (node: any) => {
+        const nodeWidth = node.measured?.width || node.width || 
+          (node.data?.type === 'driver' ? 45 : node.data?.type === 'task' ? 35 : 30);
+        const nodeHeight = node.measured?.height || node.height || 
+          (node.data?.type === 'driver' ? 45 : node.data?.type === 'task' ? 35 : 30);
+        return {
+          x: node.position.x + nodeWidth / 2,
+          y: node.position.y + nodeHeight / 2
+        };
+      };
+      
+      const currentPos = getNodeCenter(currentNode);
+      
+      // If driver is idle (delay === 0) or has no next_node, show at current node
+      if (driver.delay === 0 || !driver.next_node || driver.progress === null || driver.progress === undefined) {
+        return {
+          driver,
+          x: currentPos.x,
+          y: currentPos.y
+        };
+      }
+      
+      // Driver is moving along an edge
+      const nextNode = getNode(driver.next_node);
+      if (!nextNode) {
+        // Fallback to current node if next node not found
+        return {
+          driver,
+          x: currentPos.x,
+          y: currentPos.y
+        };
+      }
+      
+      const nextPos = getNodeCenter(nextNode);
+      
+      // Calculate position along edge based on progress
+      // Progress: 0 = at current node, 1 = at next node
+      const edgeVectorX = nextPos.x - currentPos.x;
+      const edgeVectorY = nextPos.y - currentPos.y;
+      
+      // Apply progress to edge vector
+      const driverX = currentPos.x + edgeVectorX * driver.progress;
+      const driverY = currentPos.y + edgeVectorY * driver.progress;
+      
+      return {
+        driver,
+        x: driverX,
+        y: driverY
+      };
+    }).filter((pos): pos is { driver: any; x: number; y: number } => pos !== null);
+  }, [state?.drivers, getNode, state?.timestep]);
+
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <ReactFlow
         nodes={reactFlowNodes}
         edges={reactFlowEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={onInit}
+        onMove={onMove}
+        onMoveStart={onMoveStart}
+        onMoveEnd={onMoveEnd}
+        onViewportChange={onViewportChange}
         fitView
         attributionPosition="bottom-left"
         style={{ background: '#1a1a1a' }}
@@ -191,6 +301,27 @@ function GraphViewComponent({ state, width, height, showEdgeWeights = false, sho
           }}
           maskColor="rgba(0, 0, 0, 0.6)"
         />
+        {/* Render driver dots as SVG overlay */}
+        {driverPositions.length > 0 && (
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 12,
+              overflow: 'visible',
+            }}
+          >
+            <g transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`}>
+              {driverPositions.map(({ driver, x, y }) => (
+                <DriverDot key={driver.id} driver={driver} x={x} y={y} />
+              ))}
+            </g>
+          </svg>
+        )}
       </ReactFlow>
     </div>
   );
@@ -199,7 +330,7 @@ function GraphViewComponent({ state, width, height, showEdgeWeights = false, sho
 export default function GraphView(props: GraphViewProps) {
   return (
     <ReactFlowProvider>
-      <GraphViewComponent {...props} />
+      <GraphViewComponentInner {...props} />
     </ReactFlowProvider>
   );
 }

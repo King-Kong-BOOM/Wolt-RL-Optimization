@@ -39,6 +39,11 @@ export interface DriverState {
   id: string;
   location: string; // node ID
   status?: string;
+  delay?: number;
+  next_node?: string | null; // Next node ID if moving, null if idle
+  target_node?: string | null; // Final destination node ID if has order
+  edge_weight?: number | null; // Weight of current edge being traversed
+  progress?: number | null; // Progress ratio (0-1) along current edge
   [key: string]: any; // Allow additional driver properties
 }
 
