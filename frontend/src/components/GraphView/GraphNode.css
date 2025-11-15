@@ -1,0 +1,19 @@
+@keyframes flash {
+  0% {
+    box-shadow: 0 0 20px rgba(255, 68, 68, 1), 0 2px 8px rgba(0,0,0,0.2);
+    border-color: #FF4444;
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 68, 68, 0.9), 0 2px 8px rgba(0,0,0,0.2);
+    border-color: #FF6666;
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 0 2px 8px rgba(0,0,0,0.2);
+    border-color: #FF4444;
+  }
+}
+
+.node-flashing {
+  animation: flash 0.5s ease-in-out infinite;
+}
+

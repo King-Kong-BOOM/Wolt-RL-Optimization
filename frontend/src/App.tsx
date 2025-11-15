@@ -11,6 +11,8 @@ function App() {
   const [graphDimensions, setGraphDimensions] = useState({ width: 800, height: 600 });
   const [showEdgeWeights, setShowEdgeWeights] = useState<boolean>(false);
   const [showProbabilities, setShowProbabilities] = useState<boolean>(false);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     // Calculate graph dimensions based on viewport
@@ -53,6 +55,8 @@ function App() {
             height={graphDimensions.height}
             showEdgeWeights={showEdgeWeights}
             showProbabilities={showProbabilities}
+            selectedDriverId={selectedDriverId}
+            selectedOrderId={selectedOrderId}
           />
         </main>
 
@@ -60,7 +64,13 @@ function App() {
         <aside className="metrics-panel">
           <div className="metrics-content">
             <div className="state-section">
-              <StateTable state={state} />
+              <StateTable 
+                state={state} 
+                selectedDriverId={selectedDriverId}
+                onDriverSelect={setSelectedDriverId}
+                selectedOrderId={selectedOrderId}
+                onOrderSelect={setSelectedOrderId}
+              />
             </div>
             <div className="charts-section">
               <PerformanceCharts />

@@ -1,11 +1,14 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
+import './GraphNode.css';
 
 interface CustomNodeData {
   label?: string;
   type?: 'location' | 'task' | 'driver';
   order_probability?: number;
   showProbability?: boolean;
+  isHighlighted?: boolean;
+  isFlashing?: boolean;
   [key: string]: any;
 }
 
@@ -36,6 +39,8 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
   const nodeType = data.type || 'location';
   const orderProbability = data.order_probability ?? 0;
   const showProbability = data.showProbability ?? false;
+  const isHighlighted = data.isHighlighted ?? false;
+  const isFlashing = data.isFlashing ?? false;
   
   const getNodeColor = () => {
     const baseColor = (() => {
@@ -74,26 +79,53 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
   // Determine if we should show probability (toggle on OR hover)
   const shouldShowProbability = showProbability || (isHovered && nodeType === 'location' && orderProbability !== undefined);
 
+  // Determine border style: flashing > highlighted > selected > default
+  const getBorderStyle = () => {
+    if (isFlashing && nodeType === 'location') {
+      return '3px solid #FF4444'; // Red border for flashing (new order)
+    }
+    if (isHighlighted && nodeType === 'location') {
+      return '3px solid #FFD93D'; // Yellow border for highlighted driver/order location
+    }
+    if (selected) {
+      return '3px solid #FFD93D';
+    }
+    return '2px solid #fff';
+  };
+
+  // Add glow effect for highlighted and flashing nodes
+  const getBoxShadow = () => {
+    if (isFlashing && nodeType === 'location') {
+      return '0 0 20px rgba(255, 68, 68, 0.8), 0 2px 8px rgba(0,0,0,0.2)';
+    }
+    if (isHighlighted && nodeType === 'location') {
+      return '0 0 15px rgba(255, 217, 61, 0.6), 0 2px 8px rgba(0,0,0,0.2)';
+    }
+    return '0 2px 8px rgba(0,0,0,0.2)';
+  };
+
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      className={isFlashing ? 'node-flashing' : ''}
       style={{
         width,
         height,
         borderRadius: '50%',
         backgroundColor: color,
-        border: selected ? '3px solid #FFD93D' : '2px solid #fff',
+        border: getBorderStyle(),
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         color: '#fff',
         fontSize: '12px',
         fontWeight: 'bold',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+        boxShadow: getBoxShadow(),
         position: 'relative',
-        zIndex: 10, // Ensure nodes render above edges
+        zIndex: isFlashing ? 20 : (isHighlighted ? 15 : 10), // Flashing nodes above all
         cursor: nodeType === 'location' ? 'pointer' : 'default',
+        transition: isFlashing ? 'none' : 'box-shadow 0.3s ease, border 0.3s ease',
       }}
     >
       <Handle 
