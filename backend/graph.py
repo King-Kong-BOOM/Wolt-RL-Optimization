@@ -81,14 +81,21 @@ class Graph:
         self.num_drivers = num_drivers
         self.order_distribution = order_distribution
 
-        # the node_id of each node is just its index in the self.nodes list
-        self.nodes = []  # List of Node objects
-        #all the matrices most likely should be np.darrays
-        self.edges = None # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
-
+        self.create_graph()
         self.precompute_matrices()
         
         pass
+
+    def create_graph(self):
+        """
+            Function for creating the graph itself using the contructors parameters. Implemented as its own method
+            for more readability
+        """
+        # the node_id of each node is just its index in the self.nodes list
+        self.nodes = []  # List of Node objects
+        #all the matrices most likely should be np.darrays
+        self.edges = np.zeros((self.num_nodes, self.num_nodes)) # adjancency matrix representing edges between nodes. Weigth 0 means no edge.
+        
 
     def precompute_matrices(self):
         """
@@ -123,7 +130,8 @@ class Graph:
 
     def get_render_data(self) -> dict: # not sure if this sould be seriazlized here or in the route
         """
-        Returns data needed for rendering the graph in the frontend.
+        Returns data needed for rendering the graph in the frontend. When converting deta adjacency matrices need to be converted
+        into dictionary most likely
         """
         pass
 
