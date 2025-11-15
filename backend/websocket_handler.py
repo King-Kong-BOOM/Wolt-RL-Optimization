@@ -11,6 +11,8 @@ app_state = None
 simulation_thread = None
 simulation_running = False
 socketio_instance = None
+is_training = False  # Flag to track training mode
+training_update_counter = 0  # Counter for reduced updates during training
 
 def set_app_state(state):
     """Set the global app state instance."""
@@ -19,16 +21,24 @@ def set_app_state(state):
 
 def send_state_update():
     """Send state update via SocketIO to all connected clients."""
-    global app_state, socketio_instance
+    global app_state, socketio_instance, is_training, training_update_counter
     
     if socketio_instance is None or app_state is None or app_state.graph is None:
         return
+    
+    # During training, skip state updates to save resources
+    # Optionally send updates every 100 timesteps for progress tracking
+    if is_training:
+        training_update_counter += 1
+        # Only send update every 100 timesteps during training (or disable completely)
+        if training_update_counter % 100 != 0:
+            return
     
     try:
         render_data = app_state.graph.get_render_data()
         message = {
             'type': 'state_update',
-            'mode': 'simulation',
+            'mode': 'training' if is_training else 'simulation',
             'data': render_data,
             'timestep': render_data.get('timestep', 0)
         }
@@ -62,6 +72,38 @@ def stop_simulation_loop():
     """Stop the simulation loop."""
     global simulation_running
     simulation_running = False
+
+def set_training_mode(training: bool):
+    """Set training mode flag to reduce/disable communication during training."""
+    global is_training, training_update_counter
+    is_training = training
+    if not training:
+        training_update_counter = 0  # Reset counter when training ends
+
+def send_training_start_message(timestep: int):
+    """Send training start message via WebSocket."""
+    global socketio_instance
+    if socketio_instance:
+        socketio_instance.emit('state_update', {
+            'type': 'training_start',
+            'mode': 'training',
+            'timestep': timestep
+        })
+
+def send_training_end_message(timestep: int):
+    """Send training end message via WebSocket with final state."""
+    global socketio_instance, app_state
+    if socketio_instance and app_state and app_state.graph:
+        try:
+            render_data = app_state.graph.get_render_data()
+            socketio_instance.emit('state_update', {
+                'type': 'training_end',
+                'mode': 'simulation',
+                'timestep': timestep,
+                'data': render_data
+            })
+        except Exception as e:
+            print(f"Error sending training end message: {e}")
 
 def register_socketio_handlers(socketio):
     """Register WebSocket event handlers with Flask-SocketIO."""

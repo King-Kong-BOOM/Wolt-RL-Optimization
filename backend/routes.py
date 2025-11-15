@@ -128,6 +128,7 @@ def create_simulation():
 def train_agent():
     """
     HTTP POST endpoint for training the RL agent.
+    During training, communication is reduced/disabled to save resources.
     """
     global app_state
     
@@ -147,21 +148,43 @@ def train_agent():
                 "message": "No simulation available. Create a simulation first."
             }), 404
         
+        # Set training mode to reduce communication
+        from websocket_handler import set_training_mode, send_training_start_message, send_training_end_message
+        set_training_mode(True)
+        
+        # Send training start message
+        start_timestep = app_state.graph.timestep
+        send_training_start_message(start_timestep)
+        
         # TODO: Implement actual training logic
-        # For now, just acknowledge the request
+        # For now, simulate training by running timesteps without sending updates
         # In the future, this should:
-        # 1. Set training mode
-        # 2. Run training for specified timesteps
-        # 3. Send training_start and training_end messages via WebSocket
+        # 1. Run training for specified timesteps
+        # 2. Update optimizer during training
+        # 3. Skip or reduce state updates during training (already implemented)
+        
+        # Simulate training (run timesteps without frequent updates)
+        # This is a placeholder - actual training will be implemented later
+        for _ in range(timesteps):
+            if app_state and app_state.graph:
+                app_state.time_step()
+        
+        # End training mode and send final state
+        end_timestep = app_state.graph.timestep
+        set_training_mode(False)
+        send_training_end_message(end_timestep)
         
         return jsonify({
             "success": True,
-            "message": f"Training started for {timesteps} timesteps"
+            "message": f"Training completed for {timesteps} timesteps"
         })
     except Exception as e:
+        # Ensure training mode is turned off on error
+        from websocket_handler import set_training_mode
+        set_training_mode(False)
         return jsonify({
             "success": False,
-            "message": f"Error starting training: {str(e)}"
+            "message": f"Error during training: {str(e)}"
         }), 500
 
 @routes.route('/api/simulation/pause', methods=['POST'])
