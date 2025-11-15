@@ -252,7 +252,8 @@ class Graph:
                 "position": {"x": 0, "y": 0},  # Frontend will calculate layout
                 "data": {
                     "type": "location",
-                    "label": f"Node {node.node_id}"
+                    "label": f"Node {node.node_id}",
+                    "order_probability": float(node.order_distribution) if node.order_distribution is not None else 0.0
                 }
             })
         

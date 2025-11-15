@@ -9,6 +9,8 @@ import './App.css';
 function App() {
   const { state } = useSimulationAPI();
   const [graphDimensions, setGraphDimensions] = useState({ width: 800, height: 600 });
+  const [showEdgeWeights, setShowEdgeWeights] = useState<boolean>(false);
+  const [showProbabilities, setShowProbabilities] = useState<boolean>(false);
 
   useEffect(() => {
     // Calculate graph dimensions based on viewport
@@ -35,7 +37,12 @@ function App() {
       <div className="app-content">
         {/* Left Panel: Controls */}
         <aside className="controls-panel">
-          <Controls />
+          <Controls 
+            showEdgeWeights={showEdgeWeights}
+            onToggleEdgeWeights={setShowEdgeWeights}
+            showProbabilities={showProbabilities}
+            onToggleProbabilities={setShowProbabilities}
+          />
         </aside>
 
         {/* Center Panel: Graph Visualization */}
@@ -44,6 +51,8 @@ function App() {
             state={state}
             width={graphDimensions.width}
             height={graphDimensions.height}
+            showEdgeWeights={showEdgeWeights}
+            showProbabilities={showProbabilities}
           />
         </main>
 

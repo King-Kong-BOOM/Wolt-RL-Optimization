@@ -4,7 +4,19 @@ import type { Hyperparameters } from '../../types';
 import HyperparametersForm from './HyperparametersForm';
 import './Controls.css';
 
-export default function Controls() {
+interface ControlsProps {
+  showEdgeWeights?: boolean;
+  onToggleEdgeWeights?: (show: boolean) => void;
+  showProbabilities?: boolean;
+  onToggleProbabilities?: (show: boolean) => void;
+}
+
+export default function Controls({ 
+  showEdgeWeights = false, 
+  onToggleEdgeWeights,
+  showProbabilities = false,
+  onToggleProbabilities
+}: ControlsProps) {
   const {
     createSimulation,
     trainAgent,
@@ -82,6 +94,22 @@ export default function Controls() {
           className="control-button"
         >
           {isPaused ? '▶ Continue' : '⏸ Pause'}
+        </button>
+
+        <button
+          onClick={() => onToggleEdgeWeights?.(!showEdgeWeights)}
+          className={`control-button ${showEdgeWeights ? 'active' : ''}`}
+          title="Toggle edge weight labels"
+        >
+          {showEdgeWeights ? '✓' : ''} Show Edge Weights
+        </button>
+
+        <button
+          onClick={() => onToggleProbabilities?.(!showProbabilities)}
+          className={`control-button ${showProbabilities ? 'active' : ''}`}
+          title="Toggle node probability display"
+        >
+          {showProbabilities ? '✓' : ''} Show Probabilities
         </button>
 
         <div className="train-section">

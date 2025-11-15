@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -17,6 +17,8 @@ interface GraphViewProps {
   state: SimulationState | null;
   width: number;
   height: number;
+  showEdgeWeights?: boolean;
+  showProbabilities?: boolean;
 }
 
 const nodeTypes: NodeTypes = {
@@ -31,14 +33,35 @@ const edgeTypes: EdgeTypes = {
   smoothstep: GraphEdge,
 };
 
-function GraphViewComponent({ state, width, height }: GraphViewProps) {
+function GraphViewComponent({ state, width, height, showEdgeWeights = false, showProbabilities = false }: GraphViewProps) {
   const reactFlowInstance = useRef<any>(null);
 
-  const { reactFlowNodes, reactFlowEdges } = useGraphLayout(
+  const { reactFlowNodes: baseNodes, reactFlowEdges: baseEdges } = useGraphLayout(
     state?.nodes || [],
     state?.edges || [],
     { width, height, iterations: 100 }
   );
+
+  // Add showWeight property to edges and showProbability to nodes
+  const reactFlowEdges = useMemo(() => {
+    return baseEdges.map(edge => ({
+      ...edge,
+      data: {
+        ...edge.data,
+        showWeight: showEdgeWeights,
+      },
+    }));
+  }, [baseEdges, showEdgeWeights]);
+
+  const reactFlowNodes = useMemo(() => {
+    return baseNodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        showProbability: showProbabilities,
+      },
+    }));
+  }, [baseNodes, showProbabilities]);
 
   const onInit = useCallback((instance: any) => {
     reactFlowInstance.current = instance;

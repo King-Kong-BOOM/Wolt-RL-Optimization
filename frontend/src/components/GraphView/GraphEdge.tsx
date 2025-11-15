@@ -1,7 +1,14 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { EdgeProps, useReactFlow } from 'reactflow';
 
-function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, markerEnd, source, target }: EdgeProps) {
+interface CustomEdgeData {
+  weight?: number;
+  showWeight?: boolean;
+  [key: string]: any;
+}
+
+function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, markerEnd, source, target, data }: EdgeProps<CustomEdgeData>) {
+  const [isHovered, setIsHovered] = useState(false);
   // Get node data to calculate actual center positions
   const { getNode } = useReactFlow();
   const sourceNode = getNode(source);
@@ -77,8 +84,29 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
     controlY = midY + perpY;
   }
   
+  const weight = data?.weight;
+  const showWeight = data?.showWeight || false;
+  const shouldShowWeight = showWeight || isHovered;
+  
+  // Calculate position for weight label (midpoint of the curve)
+  const labelX = (startX + endX) / 2 + (controlX - (startX + endX) / 2) * 0.5;
+  const labelY = (startY + endY) / 2 + (controlY - (startY + endY) / 2) * 0.5;
+
   return (
-    <g>
+    <g
+      style={{ cursor: 'pointer' }}
+    >
+      {/* Invisible wider path for easier hovering - positioned behind visible edge */}
+      <path
+        d={`M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{ pointerEvents: 'all' }}
+      />
+      {/* Visible edge path */}
       <path
         id={id}
         d={`M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`}
@@ -87,7 +115,35 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
         strokeWidth={selected ? 3 : 2}
         strokeDasharray={selected ? '5,5' : '0'}
         markerEnd={markerEnd}
+        style={{ pointerEvents: 'none' }}
       />
+      {shouldShowWeight && weight !== undefined && (
+        <g>
+          {/* Background circle for weight label */}
+          <circle
+            cx={labelX}
+            cy={labelY}
+            r="12"
+            fill="#1a1a1a"
+            stroke={selected ? '#FFD93D' : '#94A3B8'}
+            strokeWidth="1"
+            opacity="0.9"
+          />
+          {/* Weight text */}
+          <text
+            x={labelX}
+            y={labelY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={selected ? '#FFD93D' : '#FFFFFF'}
+            fontSize="11"
+            fontWeight="600"
+            pointerEvents="none"
+          >
+            {weight}
+          </text>
+        </g>
+      )}
     </g>
   );
 }
