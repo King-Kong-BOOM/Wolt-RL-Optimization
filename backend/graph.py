@@ -173,7 +173,7 @@ class Graph:
         self.precompute_matrices()
         
         self.amount_of_orders = self.num_nodes * [0]
-        self.drivers_orders = self.num_drivers * [0]
+        self.drivers_orders = (self.num_drivers * [0]) if self.num_drivers is not None else []
 
     @staticmethod
     def node_f():
@@ -184,9 +184,11 @@ class Graph:
             Function for creating the graph itself using the contructors parameters. 
             Uses geometric graph creation with 2D positions.
         """
+        # Initialize adjacency matrix first (needed for all paths)
+        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
+        
         if self.num_nodes <= 0:
             self.nodes = []
-            self.edges = np.zeros((0, 0), dtype=np.int32)
             self.node_positions = np.zeros((0, 2))
             return
         
@@ -210,15 +212,12 @@ class Graph:
         # Create nodes
         self.nodes = [self.node_f() for i in range(self.num_nodes)]
         
-        # Initialize adjacency matrix
-        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
-        
         if self.num_nodes < 2 or self.num_edges <= 0:
             # Initialize drivers if num_drivers is provided
             if self.num_drivers is not None and self.num_drivers > 0:
                 for i in range(self.num_drivers):
                     node_id = i % self.num_nodes
-                    driver = Driver(i, node_id)
+                    driver = Driver(i, node_id, self)
                     self.drivers.append(driver)
             return
         
@@ -268,7 +267,7 @@ class Graph:
             # Distribute drivers across nodes
             for i in range(self.num_drivers):
                 node_id = i % self.num_nodes
-                driver = Driver(i, node_id)
+                driver = Driver(i, node_id, self)
                 self.drivers.append(driver)
         
 
@@ -377,7 +376,7 @@ class Graph:
         """
         # Convert nodes to frontend format
         nodes = []
-        for i, node in self.nodes:
+        for i, node in enumerate(self.nodes):
             # Use stored positions if available, scaled to reasonable pixel coordinates (800x600 default)
             if self.node_positions is not None and len(self.node_positions.shape) == 2 and i < self.node_positions.shape[0]:
                 # Scale from [0,1] to pixel coordinates (800x600 canvas)
@@ -422,11 +421,46 @@ class Graph:
             else:
                 status = "idle"
             
+            # Initialize movement info
+            next_node = None
+            target_node = None
+            edge_weight = None
+            progress = None
+            
+            # If driver has an order, determine target and next node
+            if driver.order is not None:
+                # Determine target node based on order status
+                if driver.order.is_picked_up and not driver.order.is_delivered:
+                    target_node = driver.order.dropoff_node
+                elif not driver.order.is_picked_up:
+                    target_node = driver.order.pickup_node
+                else:
+                    # Order is delivered, driver should be idle
+                    target_node = None
+                
+                # If driver is moving (delay > 0) and has a target, calculate next node
+                if driver.delay > 0 and target_node is not None:
+                    # Get next node from path matrix
+                    next_node_id = self.path_matrix[driver.current_node, target_node]
+                    if next_node_id != -1 and next_node_id < self.num_nodes:
+                        next_node = int(next_node_id)
+                        # Get edge weight
+                        edge_weight = int(self.edges[driver.current_node, next_node])
+                        if edge_weight > 0:
+                            # Calculate progress along edge (0 = at current node, 1 = at next node)
+                            # Progress increases as delay decreases
+                            progress = float((edge_weight - driver.delay) / edge_weight)
+                            progress = max(0.0, min(1.0, progress))  # Clamp between 0 and 1
+            
             drivers.append({
                 "id": f"driver-{driver.driver_id}",
                 "location": str(driver.current_node),
                 "status": status,
-                "delay": int(driver.delay)
+                "delay": int(driver.delay),
+                "next_node": str(next_node) if next_node is not None else None,
+                "target_node": str(target_node) if target_node is not None else None,
+                "edge_weight": edge_weight,
+                "progress": progress
             })
         
         # Convert orders to frontend format (tasks)
@@ -528,7 +562,7 @@ class Driver:
         if self.delay > 0:
             self.delay -= 1
         else:
-            if self.order.is_picked_up and not self.order.is_delivered:
+            if self.order is not None and self.order.is_picked_up and not self.order.is_delivered:
                 # Move towards dropoff node
                 next_node = self.graph.path_matrix[self.current_node, self.order.dropoff_node]
                 if next_node != -1:
@@ -538,7 +572,7 @@ class Driver:
                     if self.current_node == self.order.dropoff_node:
                         self.order.is_delivered = True
                         self.graph.drivers_orders[self.id] -= 1
-            elif not self.order.is_picked_up:
+            elif self.order is not None and not self.order.is_picked_up:
                 # Move towards pickup node
                 next_node = self.graph.path_matrix[self.current_node, self.order.pickup_node]
                 if next_node != -1:
