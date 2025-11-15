@@ -10,7 +10,8 @@ import type {
   Hyperparameters,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Use relative URLs to leverage Vite proxy, or fall back to direct URL if VITE_API_URL is set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000/ws';
 
 interface UseSimulationAPIResult {
@@ -24,6 +25,7 @@ interface UseSimulationAPIResult {
   pauseSimulation: () => Promise<void>;
   resumeSimulation: () => Promise<void>;
   clearError: () => void;
+  fetchInitialRenderData: () => Promise<void>;
 }
 
 export function useSimulationAPI(): UseSimulationAPIResult {
@@ -127,6 +129,24 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     };
   }, [connectWebSocket]);
 
+  const fetchInitialRenderData = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await axios.get<APIResponse>(
+        `${API_BASE_URL}/api/simulation/render-data`
+      );
+
+      if (response.data.success && response.data.data) {
+        setState(response.data.data as SimulationState);
+      } else {
+        setError(response.data.message || 'Failed to fetch initial render data');
+      }
+    } catch (err) {
+      console.error('Error fetching initial render data:', err);
+      setError(axios.isAxiosError(err) ? err.message : 'Failed to fetch initial render data');
+    }
+  }, []);
+
   const createSimulation = useCallback(async (hyperparameters: Hyperparameters) => {
     try {
       setError(null);
@@ -139,7 +159,9 @@ export function useSimulationAPI(): UseSimulationAPIResult {
         // Reset state
         setState(null);
         setTrainingState({ isTraining: false });
-        // The new state will come through WebSocket
+        // Fetch initial render data
+        await fetchInitialRenderData();
+        // The new state will come through WebSocket during simulation
       } else {
         setError(response.data.message || 'Failed to create simulation');
       }
@@ -147,7 +169,7 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       console.error('Error creating simulation:', err);
       setError(axios.isAxiosError(err) ? err.message : 'Failed to create simulation');
     }
-  }, []);
+  }, [fetchInitialRenderData]);
 
   const trainAgent = useCallback(async (timesteps: number) => {
     try {
@@ -211,6 +233,11 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     setError(null);
   }, []);
 
+  // Fetch initial render data on mount
+  useEffect(() => {
+    fetchInitialRenderData();
+  }, [fetchInitialRenderData]);
+
   return {
     state,
     isConnected,
@@ -222,6 +249,7 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     pauseSimulation,
     resumeSimulation,
     clearError,
+    fetchInitialRenderData,
   };
 }
 

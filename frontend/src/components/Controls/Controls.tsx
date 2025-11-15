@@ -20,12 +20,22 @@ export default function Controls() {
   const [hyperparameters, setHyperparameters] = useState<Hyperparameters>({
     num_nodes: 10,
     num_drivers: 3,
+    num_edges: 12,
     task_arrival_rate: 0.5,
   });
 
   const [trainTimesteps, setTrainTimesteps] = useState<number>(100);
 
   const handleCreateGraph = async () => {
+    // Validate that num_edges >= num_nodes - 1 (minimum for connected graph)
+    const minEdges = (hyperparameters.num_nodes as number) - 1;
+    const currentEdges = (hyperparameters.num_edges as number) || minEdges;
+    
+    if (currentEdges < minEdges) {
+      alert(`Number of edges must be at least ${minEdges} (num_nodes - 1) for a connected graph.`);
+      return;
+    }
+    
     await createSimulation(hyperparameters);
   };
 

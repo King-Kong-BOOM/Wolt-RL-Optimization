@@ -80,6 +80,11 @@ class Graph:
         self.num_edges = num_edges
         self.num_drivers = num_drivers
         self.order_distribution = order_distribution
+        
+        # Tracking attributes for simulation state
+        self.timestep = 0
+        self.drivers = []
+        self.orders = []
 
         self.create_graph()
         self.precompute_matrices()
@@ -118,6 +123,14 @@ class Graph:
         self.edges[0, 5] = 2
         self.edges[5, 0] = 2
         
+        # Initialize drivers if num_drivers is provided
+        if self.num_drivers is not None and self.num_drivers > 0:
+            # Distribute drivers across nodes
+            for i in range(self.num_drivers):
+                node_id = i % self.num_nodes
+                driver = Driver(i, node_id)
+                self.drivers.append(driver)
+        
 
     def precompute_matrices(self):
         """
@@ -140,7 +153,16 @@ class Graph:
         """
         Advances the graph state by one time step. This may involve updating order locations, driver locations, etc.
         """
-
+        self.timestep += 1
+        
+        # Update all nodes
+        for node in self.nodes:
+            node.time_step()
+        
+        # Update all drivers
+        for driver in self.drivers:
+            driver.time_step()
+        
         pass
 
     def add_order(self, order: Order):
@@ -150,15 +172,127 @@ class Graph:
         pass
 
 
-    def get_render_data(self) -> dict: # not sure if this sould be seriazlized here or in the route
+    def get_render_data(self) -> dict:
         """
-        Returns data needed for rendering the graph in the frontend. When converting deta adjacency matrices need to be converted
-        into dictionary most likely
+        Returns data needed for rendering the graph in the frontend. When converting data adjacency matrices need to be converted
+        into dictionary most likely.
+        
+        Note: This method does NOT expose distance_matrix or path_matrix to keep network traffic minimal.
+        Path computation for driver routes will be done server-side on-demand (e.g., for mouse hover events).
         """
-        pass
+        # Convert nodes to frontend format
+        nodes = []
+        for node in self.nodes:
+            nodes.append({
+                "id": str(node.node_id),
+                "position": {"x": 0, "y": 0},  # Frontend will calculate layout
+                "data": {
+                    "type": "location",
+                    "label": f"Node {node.node_id}"
+                }
+            })
+        
+        # Convert adjacency matrix to edge list
+        edges = []
+        for i in range(self.num_nodes):
+            for j in range(i + 1, self.num_nodes):  # Only process upper triangle to avoid duplicates
+                weight = int(self.edges[i, j])
+                if weight > 0:  # Only include edges with weight > 0
+                    edges.append({
+                        "id": f"edge-{i}-{j}",
+                        "source": str(i),
+                        "target": str(j),
+                        "data": {
+                            "weight": weight
+                        }
+                    })
+        
+        # Convert drivers to frontend format
+        drivers = []
+        for driver in self.drivers:
+            # Determine driver status based on delay
+            if driver.delay > 0:
+                status = "moving"
+            else:
+                status = "idle"
+            
+            drivers.append({
+                "id": f"driver-{driver.driver_id}",
+                "location": str(driver.current_node),
+                "status": status,
+                "delay": int(driver.delay)
+            })
+        
+        # Convert orders to frontend format (tasks)
+        tasks = []
+        for order in self.orders:
+            # Determine order status
+            if order.is_delivered:
+                status = "delivered"
+            elif order.is_picked_up:
+                status = "in_transit"
+            else:
+                status = "pending"
+            
+            # Determine location based on status
+            if order.is_delivered:
+                location = str(order.dropoff_node)
+            elif order.is_picked_up:
+                # In transit - location would be driver's location, but for now use pickup node
+                location = str(order.pickup_node)
+            else:
+                location = str(order.pickup_node)
+            
+            tasks.append({
+                "id": f"order-{order.order_id}",
+                "status": status,
+                "location": location,
+                "pickup_node": str(order.pickup_node),
+                "dropoff_node": str(order.dropoff_node),
+                "time_created": int(order.time_created)
+            })
+        
+        return {
+            "timestep": int(self.timestep),
+            "nodes": nodes,
+            "edges": edges,
+            "drivers": drivers,
+            "tasks": tasks
+        }
 
     def get_state_representation(self) -> np.ndarray:
         """
         Returns a representation of the graph suitable for input to the optimizer.
         """
         pass
+
+    def compute_driver_path(self, driver_id: int, target_node: int) -> list:
+        """
+        Computes the path from a driver's current location to a target node.
+        This method will be used for server-side path computation when rendering driver paths on hover.
+        
+        Args:
+            driver_id: ID of the driver
+            target_node: Target node ID
+            
+        Returns:
+            List of node IDs representing the path from driver's current location to target.
+            Returns empty list if path cannot be computed.
+        
+        Note: This is a placeholder for future implementation. Will use path_matrix or
+        compute path using Dijkstra's algorithm when path_matrix is available.
+        """
+        # TODO: Implement path computation using path_matrix or Dijkstra's algorithm
+        # This will be called server-side when frontend requests driver path on hover
+        if driver_id < 0 or driver_id >= len(self.drivers):
+            return []
+        
+        driver = self.drivers[driver_id]
+        source_node = driver.current_node
+        
+        if source_node == target_node:
+            return [source_node]
+        
+        # Placeholder: Will use path_matrix when available
+        # For now, return empty list
+        return []
