@@ -386,19 +386,22 @@ def assign_order():
                 "message": f"Driver with id {driver_id} not found"
             }), 404
         
-        # If driver already has an order, unassign it first (replace behavior)
-        if driver.order is not None:
-            old_order = driver.order
-            driver.order = None
-            # Update drivers_orders count if needed
-            if driver.id < len(graph.drivers_orders):
-                graph.drivers_orders[driver.id] = max(0, graph.drivers_orders[driver.id] - 1)
+        # Create an action and pass it through app_state.apply_action() to use the same path as optimizer
+        action = {
+            'type': 'assign',
+            'order_id': order_id,
+            'driver_id': driver_id
+        }
         
-        # Assign the new order to the driver
-        driver.order = order
-        # Update drivers_orders count
-        if driver.id < len(graph.drivers_orders):
-            graph.drivers_orders[driver.id] = graph.drivers_orders[driver.id] + 1
+        # Apply the action through AppState (same path as optimizer actions)
+        app_state.apply_action(action)
+        
+        # Verify the assignment was successful
+        if driver.order is None or driver.order.order_id != order_id:
+            return jsonify({
+                "success": False,
+                "message": "Assignment failed - order or driver not found"
+            }), 400
         
         return jsonify({
             "success": True,

@@ -346,11 +346,67 @@ class Graph:
         # But keep as float64 to handle potential fractional weights in future
         pass
 
-    def do_action(self, action: np.darray):
+    def do_action(self, action):
         """
         Applies the given action to the graph state. The action is expected to be in a format suitable for the optimizer.
         So the action needs to be decoded here into actual movements or assignments in the graph.
+        
+        Action format can be:
+        - Dict with 'type': 'assign', 'order_id': int, 'driver_id': int (for manual assignments)
+        - np.ndarray or other format (for optimizer actions - to be implemented)
         """
+        # Handle manual assignment actions (dict format)
+        if isinstance(action, dict):
+            if action.get('type') == 'assign':
+                order_id = action.get('order_id')
+                driver_id = action.get('driver_id')
+                
+                if order_id is None or driver_id is None:
+                    return  # Invalid action
+                
+                # Find the order
+                order = None
+                for o in self.orders:
+                    if o.order_id == order_id:
+                        order = o
+                        break
+                
+                if order is None:
+                    return  # Order not found
+                
+                # Check if order is already delivered
+                if order.is_delivered:
+                    return  # Cannot assign delivered order
+                
+                # Find the driver
+                driver = None
+                for d in self.drivers:
+                    if d.driver_id == driver_id:
+                        driver = d
+                        break
+                
+                if driver is None:
+                    return  # Driver not found
+                
+                # If driver already has an order, unassign it first (replace behavior)
+                if driver.order is not None:
+                    old_order = driver.order
+                    driver.order = None
+                    # Update drivers_orders count if needed
+                    if driver.id < len(self.drivers_orders):
+                        self.drivers_orders[driver.id] = max(0, self.drivers_orders[driver.id] - 1)
+                
+                # Assign the new order to the driver
+                driver.order = order
+                # Update drivers_orders count
+                if driver.id < len(self.drivers_orders):
+                    self.drivers_orders[driver.id] = self.drivers_orders[driver.id] + 1
+        
+        # TODO: Handle optimizer action format (np.ndarray or other format)
+        # This will be implemented when the optimizer action format is defined
+        elif isinstance(action, np.ndarray):
+            # Placeholder for optimizer actions
+            pass
 
     def time_step(self):
         """

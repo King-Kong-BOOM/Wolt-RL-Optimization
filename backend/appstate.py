@@ -19,3 +19,14 @@ class AppState:
             self.graph.time_step()
             if self.train:
                 self.optimizer.train_step(self.graph)
+    
+    def apply_action(self, action):
+        """
+        Applies a manual action (e.g., from user input) to the graph.
+        This uses the same code path as optimizer actions through graph.do_action().
+        
+        Args:
+            action: Action to apply (dict, np.ndarray, or other format supported by graph.do_action)
+        """
+        if self.graph:
+            self.graph.do_action(action)
