@@ -43,6 +43,7 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
   const previousOrderIdsRef = useRef<Set<string>>(new Set());
   const [flashingNodes, setFlashingNodes] = useState<Set<string>>(new Set());
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [isOverInteractiveElement, setIsOverInteractiveElement] = useState(false);
   const { getNode } = useReactFlow();
 
   const { reactFlowNodes: baseNodes, reactFlowEdges: baseEdges } = useGraphLayout(
@@ -269,6 +270,51 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
     }).filter((pos): pos is { driver: any; x: number; y: number } => pos !== null);
   }, [state?.drivers, getNode, state?.timestep]);
 
+  // Track hover timeout to prevent flickering
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Handlers to track when mouse is over nodes/edges to disable panning
+  const handleNodeMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsOverInteractiveElement(true);
+  }, []);
+
+  const handleNodeMouseLeave = useCallback(() => {
+    // Small delay to prevent flickering when moving between nodes/edges
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsOverInteractiveElement(false);
+      hoverTimeoutRef.current = null;
+    }, 50);
+  }, []);
+
+  const handleEdgeMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsOverInteractiveElement(true);
+  }, []);
+
+  const handleEdgeMouseLeave = useCallback(() => {
+    // Small delay to prevent flickering when moving between edges/nodes
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsOverInteractiveElement(false);
+      hoverTimeoutRef.current = null;
+    }, 50);
+  }, []);
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <ReactFlow
@@ -281,6 +327,12 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
         onMoveStart={onMoveStart}
         onMoveEnd={onMoveEnd}
         onViewportChange={onViewportChange}
+        onNodeMouseEnter={handleNodeMouseEnter}
+        onNodeMouseLeave={handleNodeMouseLeave}
+        onEdgeMouseEnter={handleEdgeMouseEnter}
+        onEdgeMouseLeave={handleEdgeMouseLeave}
+        panOnDrag={!isOverInteractiveElement}
+        panOnScroll={true}
         fitView
         attributionPosition="bottom-left"
         style={{ background: '#1a1a1a' }}

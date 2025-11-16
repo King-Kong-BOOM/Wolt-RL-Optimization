@@ -17,3 +17,68 @@
   animation: flash 0.5s ease-in-out infinite;
 }
 
+.node-content-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.node-label,
+.node-probability {
+  position: absolute;
+  text-align: center;
+  padding: 2px;
+  font-size: 9px;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Show label by default, hide on hover when probability exists and toggle is off */
+/* Use data-is-hovered for more stable hover detection */
+.graph-node.node-location[data-has-probability="true"][data-show-probability="false"][data-is-hovered="true"] .node-label {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Also support CSS :hover as fallback */
+.graph-node.node-location[data-has-probability="true"][data-show-probability="false"]:hover .node-label {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Show probability on hover when toggle is off, or always when toggle is on */
+.graph-node.node-location[data-has-probability="true"][data-show-probability="false"] .node-probability {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.graph-node.node-location[data-has-probability="true"][data-show-probability="false"][data-is-hovered="true"] .node-probability {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Also support CSS :hover as fallback */
+.graph-node.node-location[data-has-probability="true"][data-show-probability="false"]:hover .node-probability {
+  opacity: 1;
+  visibility: visible;
+}
+
+.graph-node.node-location[data-has-probability="true"][data-show-probability="true"] .node-label {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.graph-node.node-location[data-has-probability="true"][data-show-probability="true"] .node-probability {
+  opacity: 1;
+  visibility: visible;
+}
+

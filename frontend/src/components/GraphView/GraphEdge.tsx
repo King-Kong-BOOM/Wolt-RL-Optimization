@@ -1,5 +1,6 @@
-import { memo, useState } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { EdgeProps, useReactFlow } from 'reactflow';
+import './GraphEdge.css';
 
 interface CustomEdgeData {
   weight?: number;
@@ -9,8 +10,69 @@ interface CustomEdgeData {
 
 function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, markerEnd, source, target, data }: EdgeProps<CustomEdgeData>) {
   const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hoverPathRef = useRef<SVGPathElement>(null);
+  const isHoveredRef = useRef(false);
+  
   // Get node data to calculate actual center positions
   const { getNode } = useReactFlow();
+  
+  // Use a more stable hover detection on the invisible hover path
+  // Use mouseover/mouseout for SVG elements as they're more reliable
+  useEffect(() => {
+    const pathElement = hoverPathRef.current;
+    if (!pathElement) return;
+    
+    const handleMouseOver = (e: MouseEvent) => {
+      e.stopPropagation();
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
+      isHoveredRef.current = true;
+      setIsHovered(true);
+    };
+    
+    const handleMouseOut = (e: MouseEvent) => {
+      e.stopPropagation();
+      // Check if we're actually leaving the edge area
+      const relatedTarget = e.relatedTarget as Node;
+      // If relatedTarget is null or not a child of the path, we're leaving
+      if (!relatedTarget || !pathElement.contains(relatedTarget)) {
+        // Small delay to prevent flickering
+        hoverTimeoutRef.current = setTimeout(() => {
+          // Double-check we're still not hovering
+          if (!isHoveredRef.current) {
+            setIsHovered(false);
+          }
+          hoverTimeoutRef.current = null;
+        }, 150);
+      }
+    };
+    
+    // Also handle mouseleave for additional stability
+    const handleMouseLeave = (e: MouseEvent) => {
+      e.stopPropagation();
+      hoverTimeoutRef.current = setTimeout(() => {
+        isHoveredRef.current = false;
+        setIsHovered(false);
+        hoverTimeoutRef.current = null;
+      }, 150);
+    };
+    
+    pathElement.addEventListener('mouseover', handleMouseOver);
+    pathElement.addEventListener('mouseout', handleMouseOut);
+    pathElement.addEventListener('mouseleave', handleMouseLeave);
+    
+    return () => {
+      pathElement.removeEventListener('mouseover', handleMouseOver);
+      pathElement.removeEventListener('mouseout', handleMouseOut);
+      pathElement.removeEventListener('mouseleave', handleMouseLeave);
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
   const sourceNode = getNode(source);
   const targetNode = getNode(target);
   
@@ -74,25 +136,28 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   
   const weight = data?.weight;
   const showWeight = data?.showWeight || false;
-  const shouldShowWeight = showWeight || isHovered;
   
   // Calculate position for weight label (midpoint of the straight line)
   const labelX = (startX + endX) / 2;
   const labelY = (startY + endY) / 2;
 
+  const shouldShowWeight = showWeight || isHovered;
+  
   return (
     <g
+      className="graph-edge"
+      data-show-weight={showWeight ? 'true' : 'false'}
+      data-is-hovered={isHovered ? 'true' : 'false'}
       style={{ cursor: 'pointer' }}
     >
       {/* Invisible wider path for easier hovering - positioned behind visible edge */}
       <path
+        ref={hoverPathRef}
         d={`M ${startX} ${startY} L ${endX} ${endY}`}
         fill="none"
         stroke="transparent"
         strokeWidth="20"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        style={{ pointerEvents: 'all' }}
+        style={{ pointerEvents: 'all', cursor: 'pointer' }}
       />
       {/* Visible edge path - straight line */}
       <path
@@ -105,8 +170,11 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
         markerEnd={markerEnd}
         style={{ pointerEvents: 'none' }}
       />
-      {shouldShowWeight && weight !== undefined && (
-        <g>
+      {weight !== undefined && shouldShowWeight && (
+        <g 
+          className="edge-weight-label"
+          pointerEvents="none"
+        >
           {/* Background circle for weight label */}
           <circle
             cx={labelX}
@@ -136,8 +204,21 @@ function GraphEdgeComponent({ id, sourceX, sourceY, targetX, targetY, selected, 
   );
 }
 
-// Wrap in memo but ensure it can use hooks
-const GraphEdge = memo(GraphEdgeComponent);
+// Custom comparison function for memo to prevent unnecessary re-renders
+// Note: We don't compare sourceX/sourceY/targetX/targetY because ReactFlow updates these
+// frequently, but we still want to prevent re-renders when only hover state changes internally
+const GraphEdge = memo(GraphEdgeComponent, (prevProps, nextProps) => {
+  // Only re-render if essential data changes
+  // Hover state is internal and shouldn't trigger parent re-renders
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.source === nextProps.source &&
+    prevProps.target === nextProps.target &&
+    prevProps.data?.weight === nextProps.data?.weight &&
+    prevProps.data?.showWeight === nextProps.data?.showWeight &&
+    prevProps.selected === nextProps.selected
+  );
+});
 
 export default GraphEdge;
 

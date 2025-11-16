@@ -1,0 +1,27 @@
+/* Edge hover styles using CSS and data attributes */
+/* Use data-is-hovered for more stable hover detection */
+
+/* Hide by default when toggle is off */
+.graph-edge[data-show-weight="false"] .edge-weight-label {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+/* Show on hover when toggle is off (using data attribute for stability) */
+.graph-edge[data-show-weight="false"][data-is-hovered="true"] .edge-weight-label {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Also support CSS :hover as fallback */
+.graph-edge[data-show-weight="false"]:hover .edge-weight-label {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Always show when toggle is on */
+.graph-edge[data-show-weight="true"] .edge-weight-label {
+  opacity: 1 !important;
+  visibility: visible !important;
+}

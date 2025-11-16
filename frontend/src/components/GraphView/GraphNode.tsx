@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import './GraphNode.css';
 
@@ -35,12 +35,47 @@ function darkenColor(hex: string, probability: number): string {
 }
 
 function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
+  const nodeRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nodeType = data.type || 'location';
   const orderProbability = data.order_probability ?? 0;
   const showProbability = data.showProbability ?? false;
   const isHighlighted = data.isHighlighted ?? false;
   const isFlashing = data.isFlashing ?? false;
+  
+  // Use a more stable hover detection that doesn't get reset by re-renders
+  useEffect(() => {
+    const element = nodeRef.current;
+    if (!element) return;
+    
+    const handleMouseEnter = () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
+      setIsHovered(true);
+    };
+    
+    const handleMouseLeave = () => {
+      // Small delay to prevent flickering
+      hoverTimeoutRef.current = setTimeout(() => {
+        setIsHovered(false);
+        hoverTimeoutRef.current = null;
+      }, 50);
+    };
+    
+    element.addEventListener('mouseenter', handleMouseEnter);
+    element.addEventListener('mouseleave', handleMouseLeave);
+    
+    return () => {
+      element.removeEventListener('mouseenter', handleMouseEnter);
+      element.removeEventListener('mouseleave', handleMouseLeave);
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
   
   const getNodeColor = () => {
     const baseColor = (() => {
@@ -106,9 +141,11 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={isFlashing ? 'node-flashing' : ''}
+      ref={nodeRef}
+      className={`graph-node ${isFlashing ? 'node-flashing' : ''} ${nodeType === 'location' ? 'node-location' : ''}`}
+      data-show-probability={showProbability ? 'true' : 'false'}
+      data-has-probability={nodeType === 'location' && orderProbability !== undefined ? 'true' : 'false'}
+      data-is-hovered={isHovered ? 'true' : 'false'}
       style={{
         width,
         height,
@@ -126,6 +163,8 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
         zIndex: isFlashing ? 20 : (isHighlighted ? 15 : 10), // Flashing nodes above all
         cursor: nodeType === 'location' ? 'pointer' : 'default',
         transition: isFlashing ? 'none' : 'box-shadow 0.3s ease, border 0.3s ease',
+        pointerEvents: 'auto',
+        overflow: 'hidden',
       }}
     >
       <Handle 
@@ -133,15 +172,18 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
         position={Position.Center}
         style={{ opacity: 0, width: 0, height: 0 }}
       />
-      {shouldShowProbability && nodeType === 'location' && orderProbability !== undefined ? (
-        <div style={{ textAlign: 'center', padding: '2px' }}>
-          {(orderProbability * 100).toFixed(0)}%
+      <div className="node-content-wrapper">
+        {/* Label - shown by default, hidden on hover when probability exists */}
+        <div className="node-label">
+          {data.label || ''}
         </div>
-      ) : data.label && (
-        <div style={{ textAlign: 'center', padding: '2px', fontSize: '9px' }}>
-          {data.label}
-        </div>
-      )}
+        {/* Probability - shown on toggle or hover (via CSS) */}
+        {nodeType === 'location' && orderProbability !== undefined && (
+          <div className="node-probability">
+            {(orderProbability * 100).toFixed(0)}%
+          </div>
+        )}
+      </div>
       <Handle 
         type="source" 
         position={Position.Center}
@@ -151,5 +193,17 @@ function GraphNode({ data, selected }: NodeProps<CustomNodeData>) {
   );
 }
 
-export default memo(GraphNode);
+// Custom comparison function for memo to prevent unnecessary re-renders
+export default memo(GraphNode, (prevProps, nextProps) => {
+  // Only re-render if data or selected state actually changes
+  return (
+    prevProps.data?.label === nextProps.data?.label &&
+    prevProps.data?.type === nextProps.data?.type &&
+    prevProps.data?.order_probability === nextProps.data?.order_probability &&
+    prevProps.data?.showProbability === nextProps.data?.showProbability &&
+    prevProps.data?.isHighlighted === nextProps.data?.isHighlighted &&
+    prevProps.data?.isFlashing === nextProps.data?.isFlashing &&
+    prevProps.selected === nextProps.selected
+  );
+});
 
