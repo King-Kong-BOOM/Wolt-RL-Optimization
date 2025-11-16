@@ -240,8 +240,11 @@ def train_agent():
             }), 400  # Changed from 404 to 400 (Bad Request) since endpoint exists but precondition not met
         
         # Set training mode to reduce communication
-        from websocket_handler import set_training_mode, send_training_start_message, send_training_end_message
+        from websocket_handler import set_training_mode, send_training_start_message, send_training_end_message, stop_simulation_loop
         set_training_mode(True)
+        
+        # Stop the simulation loop during training (SB3's learn() handles its own loop)
+        stop_simulation_loop()
         
         # Send training start message
         start_timestep = app_state.graph.timestep
@@ -252,6 +255,8 @@ def train_agent():
             # Check if optimizer has train method
             if hasattr(app_state.optimizer, 'train'):
                 app_state.train = True  # Enable training mode
+                # During training, SB3's learn() uses env.step() which handles actions internally
+                # So we don't want the simulation loop to interfere
                 app_state.optimizer.train(total_timesteps=timesteps)
             else:
                 # Fallback: run timesteps with training enabled
@@ -266,6 +271,9 @@ def train_agent():
             print(error_trace)
             app_state.train = False
             set_training_mode(False)
+            # Restart simulation loop on error
+            from websocket_handler import start_simulation_loop
+            start_simulation_loop()
             return jsonify({
                 "success": False,
                 "message": f"Training error: {str(e)}"
@@ -277,14 +285,26 @@ def train_agent():
         set_training_mode(False)
         send_training_end_message(end_timestep)
         
+        # Restart simulation loop after training
+        from websocket_handler import start_simulation_loop
+        start_simulation_loop()
+        
         return jsonify({
             "success": True,
             "message": f"Training completed for {timesteps} timesteps"
         })
     except Exception as e:
         # Ensure training mode is turned off on error
-        from websocket_handler import set_training_mode
+        from websocket_handler import set_training_mode, start_simulation_loop
         set_training_mode(False)
+        if app_state:
+            app_state.train = False
+        # Restart simulation loop on error
+        start_simulation_loop()
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in train_agent endpoint: {str(e)}")
+        print(error_trace)
         return jsonify({
             "success": False,
             "message": f"Error during training: {str(e)}"

@@ -20,23 +20,32 @@ def set_app_state(state):
     global app_state
     app_state = state
 
-def send_state_update():
-    """Send state update via SocketIO to all connected clients."""
+def send_state_update(force: bool = False):
+    """
+    Send state update via SocketIO to all connected clients.
+    
+    Args:
+        force: If True, send update even during training (used by training callback)
+    """
     global app_state, socketio_instance, is_training, training_update_counter
     
     if socketio_instance is None or app_state is None or app_state.graph is None:
         return
     
-    # During training, skip state updates to save resources
-    # Optionally send updates every 100 timesteps for progress tracking
-    if is_training:
+    # During training, send updates more frequently (every 5 timesteps) to allow visualization
+    # This is a good balance between performance and visualization
+    # However, if force=True (from training callback), always send the update
+    if is_training and not force:
         training_update_counter += 1
-        # Only send update every 100 timesteps during training (or disable completely)
-        if training_update_counter % 100 != 0:
+        # Send update every 5 timesteps during training for smooth visualization
+        if training_update_counter % 5 != 0:
             return
     
     try:
         render_data = app_state.graph.get_render_data()
+        # Debug logging
+        if is_training and training_update_counter % 50 == 0:  # Log every 50 updates during training
+            print(f"DEBUG: Sending state update during training - nodes: {len(render_data.get('nodes', []))}, drivers: {len(render_data.get('drivers', []))}")
         message = {
             'type': 'state_update',
             'mode': 'training' if is_training else 'simulation',

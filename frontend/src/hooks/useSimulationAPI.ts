@@ -94,12 +94,13 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       socket.on('state_update', (message: WebSocketMessage) => {
         try {
           if (message.type === 'state_update') {
-            // Use ref to get latest training state without causing reconnection
-            if (message.mode === 'simulation' && !trainingStateRef.current.isTraining) {
-              // Only update state during simulation, not during training
-              if (message.data) {
-                setState(message.data);
-              }
+            // Update state for both simulation and training modes
+            // During training, we want to see the visualization
+            if (message.data) {
+              console.log('DEBUG: Received state_update, nodes:', message.data.nodes?.length || 0, 'drivers:', message.data.drivers?.length || 0, 'mode:', message.mode);
+              setState(message.data);
+            } else {
+              console.warn('DEBUG: Received state_update but message.data is missing', message);
             }
           } else if (message.type === 'training_start') {
             setTrainingState({
@@ -175,8 +176,11 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       );
 
       if (response.data.success && response.data.data) {
-        setState(response.data.data as SimulationState);
+        const data = response.data.data as SimulationState;
+        console.log('DEBUG: Fetched initial render data, nodes:', data.nodes?.length || 0, 'drivers:', data.drivers?.length || 0);
+        setState(data);
       } else {
+        console.warn('DEBUG: Failed to fetch initial render data:', response.data.message);
         setError(response.data.message || 'Failed to fetch initial render data');
       }
     } catch (err) {

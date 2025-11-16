@@ -67,6 +67,15 @@ class DeliveryEnv(gym.Env):
         
     def _get_observation(self) -> np.ndarray:
         """Extract observation from current graph state."""
+        # Ensure graph reference is valid
+        if self.graph is None:
+            print("ERROR: Graph is None in _get_observation()")
+            # Return zero observation
+            obs_dim = (self.num_drivers * 5 + 
+                      self.max_pending_orders * 4 + 
+                      self.num_nodes * self.num_nodes)
+            return np.zeros(obs_dim, dtype=np.float32)
+        
         obs = []
         
         # Driver features (5 per driver: location, has_order, delay, order_pickup_node, order_dropoff_node)
@@ -125,6 +134,12 @@ class DeliveryEnv(gym.Env):
         Returns:
             observation, reward, terminated, truncated, info
         """
+        # Ensure graph reference is valid
+        if self.graph is None:
+            print("ERROR: Environment graph is None in step()")
+            obs = self._get_observation()
+            return obs, 0.0, True, False, {}
+        
         # Decode action: action = order_index * (num_drivers + 1) + driver_id
         driver_options = self.num_drivers + 1  # +1 for "no assignment"
         order_index = int(action) // driver_options
@@ -133,11 +148,22 @@ class DeliveryEnv(gym.Env):
         # Get pending orders
         pending_orders = self._get_pending_orders()
         
+        # Debug logging - always show state
+        total_orders = len(self.graph.orders) if self.graph else 0
+        delivered_orders = sum(1 for o in self.graph.orders if o.is_delivered) if self.graph else 0
+        in_transit_orders = sum(1 for o in self.graph.orders if o.is_picked_up and not o.is_delivered) if self.graph else 0
+        
+        print(f"DEBUG step: action={action}, order_index={order_index}, driver_id={driver_id}, "
+              f"pending_orders={len(pending_orders)}, total_orders={total_orders}, "
+              f"delivered={delivered_orders}, in_transit={in_transit_orders}")
+        
         # Execute action: assign order to driver
         # Check if order_index is valid and driver_id is valid
         if order_index < len(pending_orders) and driver_id < self.num_drivers:
             order = pending_orders[order_index]
             driver = self.graph.drivers[driver_id]
+            
+            print(f"DEBUG: Assigning order {order.order_id} to driver {driver.driver_id}")
             
             # Assign order to driver (using do_action format)
             assignment_action = {
@@ -146,12 +172,29 @@ class DeliveryEnv(gym.Env):
                 'driver_id': driver.driver_id
             }
             self.graph.do_action(assignment_action)
+            
+            # Verify assignment
+            if driver.order is not None and driver.order.order_id == order.order_id:
+                print(f"DEBUG: Order {order.order_id} successfully assigned to driver {driver.driver_id}")
+            else:
+                print(f"DEBUG: WARNING - Order assignment may have failed. Driver {driver.driver_id} order: {driver.order.order_id if driver.order else None}")
+        else:
+            if len(pending_orders) == 0:
+                print(f"DEBUG: No pending orders to assign. Action {action} ignored.")
+            else:
+                print(f"DEBUG: Invalid action - order_index={order_index} (max={len(pending_orders)-1}), driver_id={driver_id} (max={self.num_drivers-1})")
         
         # Store order states before timestep to track newly delivered
         orders_before = {o.order_id: o.is_delivered for o in self.graph.orders}
         
         # Advance simulation by one timestep
+        # This creates new orders and moves drivers
+        orders_before_count = len(self.graph.orders)
         self.graph.time_step()
+        orders_after_count = len(self.graph.orders)
+        
+        if orders_after_count > orders_before_count:
+            print(f"DEBUG: Created {orders_after_count - orders_before_count} new orders. Total orders: {orders_after_count}")
         
         # Calculate reward: negative average delivery time
         # Track newly delivered orders

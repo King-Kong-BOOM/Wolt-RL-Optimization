@@ -11,20 +11,26 @@ class AppState:
     def time_step(self):
         """
         Advances the application state by one time step. This involves updating the graph and optimizer states.
+        
+        Note: During training with SB3, actions are handled by env.step() internally,
+        so we should not call get_action() here during training.
         """
         
         if self.graph:
-            # If optimizer exists, get action and apply it before time step
-            if self.optimizer:
+            # If optimizer exists and NOT in training mode, get action and apply it
+            # During training, SB3's learn() handles actions through env.step()
+            if self.optimizer and not self.train:
                 action = self.optimizer.get_action(self.graph)
-                self.graph.do_action(action)
+                if action is not None:
+                    self.graph.do_action(action)
             
             # Always advance graph time step (regardless of optimizer presence)
             self.graph.time_step()
             
-            # If optimizer exists and training, do training step after time step
-            if self.optimizer and self.train:
-                self.optimizer.train_step(self.graph)
+            # train_step is not used with SB3's learn() method, which handles training internally
+            # Only use train_step for custom training loops
+            # if self.optimizer and self.train:
+            #     self.optimizer.train_step(self.graph)
     
     def apply_action(self, action):
         """

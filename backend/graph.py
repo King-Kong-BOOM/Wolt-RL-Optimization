@@ -498,11 +498,50 @@ class Graph:
             else:
                 status = "idle"
             
+            # Calculate next_node, target_node, edge_weight, and progress for moving drivers
+            next_node = None
+            target_node = None
+            edge_weight = None
+            progress = None
+            
+            if driver.order is not None and driver.delay > 0:
+                # Driver is moving - determine next node and target
+                if driver.order.is_picked_up and not driver.order.is_delivered:
+                    # Moving to dropoff
+                    target_node = str(driver.order.dropoff_node)
+                    if self.path_matrix is not None and driver.current_node < self.path_matrix.shape[0] and driver.order.dropoff_node < self.path_matrix.shape[1]:
+                        next_node_idx = self.path_matrix[driver.current_node, driver.order.dropoff_node]
+                        if next_node_idx != -1:
+                            next_node = str(next_node_idx)
+                            if driver.current_node < self.edges.shape[0] and next_node_idx < self.edges.shape[1]:
+                                edge_weight = int(self.edges[driver.current_node, next_node_idx])
+                                if edge_weight > 0:
+                                    # Progress is inverse of delay (delay decreases as progress increases)
+                                    progress = 1.0 - (float(driver.delay) / float(edge_weight))
+                                    progress = max(0.0, min(1.0, progress))  # Clamp to [0, 1]
+                elif not driver.order.is_picked_up:
+                    # Moving to pickup
+                    target_node = str(driver.order.pickup_node)
+                    if self.path_matrix is not None and driver.current_node < self.path_matrix.shape[0] and driver.order.pickup_node < self.path_matrix.shape[1]:
+                        next_node_idx = self.path_matrix[driver.current_node, driver.order.pickup_node]
+                        if next_node_idx != -1:
+                            next_node = str(next_node_idx)
+                            if driver.current_node < self.edges.shape[0] and next_node_idx < self.edges.shape[1]:
+                                edge_weight = int(self.edges[driver.current_node, next_node_idx])
+                                if edge_weight > 0:
+                                    # Progress is inverse of delay (delay decreases as progress increases)
+                                    progress = 1.0 - (float(driver.delay) / float(edge_weight))
+                                    progress = max(0.0, min(1.0, progress))  # Clamp to [0, 1]
+            
             drivers.append({
                 "id": f"driver-{driver.driver_id}",
                 "location": str(driver.current_node),
                 "status": status,
-                "delay": int(driver.delay)
+                "delay": int(driver.delay),
+                "next_node": next_node,
+                "target_node": target_node,
+                "edge_weight": edge_weight,
+                "progress": progress
             })
         
         # Convert orders to frontend format (tasks)

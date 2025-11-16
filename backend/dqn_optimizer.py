@@ -13,15 +13,47 @@ from optimizer import Optimizer
 
 
 class TrainingCallback(BaseCallback):
-    """Callback for tracking training progress."""
+    """Callback for tracking training progress and syncing graph reference."""
     
-    def __init__(self, verbose=0):
+    def __init__(self, verbose=0, graph=None, env=None):
         super().__init__(verbose)
         self.episode_rewards = []
         self.episode_lengths = []
         self.avg_delivery_times = []
+        self.graph = graph
+        self.env = env
     
     def _on_step(self) -> bool:
+        # Sync graph reference on every step to ensure environment uses latest graph
+        if self.graph is not None and self.env is not None:
+            # Update the environment's graph reference
+            # SB3 might wrap the env, so we need to access the actual env
+            actual_env = self.env
+            if hasattr(actual_env, 'envs') and len(actual_env.envs) > 0:
+                # VecEnv wrapper - update all envs
+                for env in actual_env.envs:
+                    if hasattr(env, 'graph'):
+                        env.graph = self.graph
+            elif hasattr(actual_env, 'env'):
+                # Single env wrapper
+                if hasattr(actual_env.env, 'graph'):
+                    actual_env.env.graph = self.graph
+            elif hasattr(actual_env, 'graph'):
+                # Direct env
+                actual_env.graph = self.graph
+        
+        # Send state update to frontend during training for visualization
+        # Import here to avoid circular imports
+        # Use force=True to bypass the counter throttling since we're calling from the callback
+        try:
+            from websocket_handler import send_state_update
+            # Send update every step for smooth visualization during training
+            # The rendering is fast enough that we can afford this
+            send_state_update(force=True)
+        except Exception as e:
+            # Silently fail if websocket handler not available
+            pass
+        
         # Log episode statistics if available
         if 'episode' in self.locals.get('infos', [{}])[0]:
             episode_info = self.locals['infos'][0].get('episode', {})
@@ -45,7 +77,7 @@ class DQNOptimizer(Optimizer):
         self.model: Optional[DQN] = None
         self.env: Optional[DeliveryEnv] = None
         self.model_path = model_path or "models/dqn_delivery_model"
-        self.training_callback = TrainingCallback()
+        self.training_callback = TrainingCallback(graph=graph, env=None)  # env will be set later
         
         # Create environment if graph is provided
         if graph is not None:
@@ -147,16 +179,55 @@ class DQNOptimizer(Optimizer):
         if self.model is None or self.env is None:
             raise ValueError("Model not initialized. Create environment first.")
         
+        # Ensure environment's graph reference is up to date
+        if self.graph is not None:
+            # Update direct env reference
+            self.env.graph = self.graph
+            
+            # Update model's environment reference (SB3 might wrap it)
+            if hasattr(self.model, 'env'):
+                model_env = self.model.env
+                # Handle VecEnv wrapper
+                if hasattr(model_env, 'envs') and len(model_env.envs) > 0:
+                    for env in model_env.envs:
+                        if hasattr(env, 'graph'):
+                            env.graph = self.graph
+                            print(f"DEBUG: Updated VecEnv env graph reference")
+                elif hasattr(model_env, 'env'):
+                    # Single env wrapper
+                    if hasattr(model_env.env, 'graph'):
+                        model_env.env.graph = self.graph
+                        print(f"DEBUG: Updated wrapped env graph reference")
+                elif hasattr(model_env, 'graph'):
+                    # Direct env
+                    model_env.graph = self.graph
+                    print(f"DEBUG: Updated model env graph reference")
+            
+            print(f"DEBUG: Updated env.graph reference before training. Graph timestep: {self.graph.timestep}, Orders: {len(self.graph.orders)}")
+            print(f"DEBUG: Graph has {len(self.graph.drivers)} drivers, {len(self.graph.orders)} orders")
+        
+        # Update callback with current graph and env references
+        self.training_callback.graph = self.graph
+        # Get the actual environment from the model (might be wrapped)
+        model_env = self.model.get_env() if hasattr(self.model, 'get_env') else (self.model.env if hasattr(self.model, 'env') else self.env)
+        self.training_callback.env = model_env
+        
         save_path = save_path or self.model_path
         
         # Use DQN's built-in learn() method which handles the training loop
         # This properly manages the replay buffer and training updates
+        print(f"DEBUG: Starting training with {total_timesteps} timesteps")
         self.model.learn(
             total_timesteps=total_timesteps,
             callback=self.training_callback,
             log_interval=100,
             progress_bar=True
         )
+        
+        # Ensure graph reference is still synced after training
+        if self.graph is not None:
+            self.env.graph = self.graph
+            print(f"DEBUG: Synced env.graph reference after training. Graph timestep: {self.graph.timestep}, Orders: {len(self.graph.orders)}")
         
         # Save the model
         os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
