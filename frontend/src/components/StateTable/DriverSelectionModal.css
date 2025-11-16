@@ -1,0 +1,158 @@
+.driver-selection-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.driver-selection-modal {
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  padding: 0;
+  min-width: 400px;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.driver-selection-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.driver-selection-modal-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.driver-selection-modal-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.driver-selection-modal-close:hover {
+  background-color: #333;
+}
+
+.driver-selection-modal-content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.driver-selection-modal-instruction {
+  color: #ccc;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.driver-selection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.driver-selection-item {
+  padding: 12px;
+  background-color: #2a2a2a;
+  border: 2px solid #333;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.driver-selection-item:hover {
+  background-color: #333;
+  border-color: #555;
+}
+
+.driver-selection-item.selected {
+  border-color: #FFD93D;
+  background-color: #3a3a2a;
+}
+
+.driver-selection-item-id {
+  font-weight: bold;
+  color: #FFD93D;
+  margin-bottom: 4px;
+}
+
+.driver-selection-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.driver-selection-empty {
+  text-align: center;
+  color: #666;
+  padding: 20px;
+}
+
+.driver-selection-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #333;
+}
+
+.driver-selection-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.driver-selection-button.cancel {
+  background-color: #444;
+  color: #fff;
+}
+
+.driver-selection-button.cancel:hover {
+  background-color: #555;
+}
+
+.driver-selection-button.confirm {
+  background-color: #FFD93D;
+  color: #1a1a1a;
+}
+
+.driver-selection-button.confirm:hover:not(:disabled) {
+  background-color: #ffed4e;
+}
+
+.driver-selection-button.confirm:disabled {
+  background-color: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+

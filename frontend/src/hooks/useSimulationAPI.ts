@@ -29,6 +29,7 @@ interface UseSimulationAPIResult {
   pauseSimulation: () => Promise<void>;
   resumeSimulation: () => Promise<void>;
   setSpeed: (speed: number) => Promise<void>;
+  assignOrder: (orderId: string, driverId: string) => Promise<void>;
   clearError: () => void;
   fetchInitialRenderData: () => Promise<void>;
 }
@@ -275,6 +276,30 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     }
   }, []);
 
+  const assignOrder = useCallback(async (orderId: string, driverId: string) => {
+    try {
+      setError(null);
+      const response = await axios.post<APIResponse>(
+        `${API_BASE_URL}/api/simulation/assign-order`,
+        { order_id: orderId, driver_id: driverId }
+      );
+
+      if (!response.data.success) {
+        setError(response.data.message || 'Failed to assign order');
+        throw new Error(response.data.message || 'Failed to assign order');
+      }
+      
+      // State will be updated via WebSocket automatically
+    } catch (err) {
+      console.error('Error assigning order:', err);
+      const errorMessage = axios.isAxiosError(err) 
+        ? (err.response?.data?.message || err.message)
+        : 'Failed to assign order';
+      setError(errorMessage);
+      throw err;
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -307,6 +332,7 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     pauseSimulation,
     resumeSimulation,
     setSpeed,
+    assignOrder,
     clearError,
     fetchInitialRenderData,
   };

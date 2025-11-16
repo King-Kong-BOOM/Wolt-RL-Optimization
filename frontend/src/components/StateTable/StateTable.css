@@ -210,3 +210,39 @@
   background-color: #2a2a2a;
 }
 
+.order-assignment-section {
+  padding: 16px;
+  border-top: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assign-order-button {
+  padding: 10px 16px;
+  background-color: #FFD93D;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.assign-order-button:hover:not(:disabled) {
+  background-color: #ffed4e;
+}
+
+.assign-order-button:disabled {
+  background-color: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.assigned-driver-info {
+  color: #4ECDC4;
+  font-size: 13px;
+  font-weight: 500;
+}
+

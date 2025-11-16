@@ -310,6 +310,110 @@ def get_speed():
             "message": f"Error getting speed: {str(e)}"
         }), 500
 
+@routes.route('/api/simulation/assign-order', methods=['POST'])
+def assign_order():
+    """
+    HTTP POST endpoint for manually assigning an order to a driver.
+    Accepts order_id and driver_id in request body.
+    """
+    global app_state
+    
+    if app_state is None or app_state.graph is None:
+        return jsonify({
+            "success": False,
+            "message": "No simulation available"
+        }), 404
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "Missing request body"
+            }), 400
+        
+        order_id_str = data.get('order_id')
+        driver_id_str = data.get('driver_id')
+        
+        if not order_id_str or not driver_id_str:
+            return jsonify({
+                "success": False,
+                "message": "Missing order_id or driver_id in request"
+            }), 400
+        
+        # Parse IDs (format: "order-{id}" and "driver-{id}")
+        try:
+            order_id = int(order_id_str.replace('order-', ''))
+            driver_id = int(driver_id_str.replace('driver-', ''))
+        except (ValueError, AttributeError):
+            return jsonify({
+                "success": False,
+                "message": "Invalid order_id or driver_id format"
+            }), 400
+        
+        graph = app_state.graph
+        
+        # Find the order
+        order = None
+        for o in graph.orders:
+            if o.order_id == order_id:
+                order = o
+                break
+        
+        if order is None:
+            return jsonify({
+                "success": False,
+                "message": f"Order with id {order_id} not found"
+            }), 404
+        
+        # Check if order is already delivered
+        if order.is_delivered:
+            return jsonify({
+                "success": False,
+                "message": "Cannot assign a delivered order"
+            }), 400
+        
+        # Find the driver
+        driver = None
+        for d in graph.drivers:
+            if d.driver_id == driver_id:
+                driver = d
+                break
+        
+        if driver is None:
+            return jsonify({
+                "success": False,
+                "message": f"Driver with id {driver_id} not found"
+            }), 404
+        
+        # If driver already has an order, unassign it first (replace behavior)
+        if driver.order is not None:
+            old_order = driver.order
+            driver.order = None
+            # Update drivers_orders count if needed
+            if driver.id < len(graph.drivers_orders):
+                graph.drivers_orders[driver.id] = max(0, graph.drivers_orders[driver.id] - 1)
+        
+        # Assign the new order to the driver
+        driver.order = order
+        # Update drivers_orders count
+        if driver.id < len(graph.drivers_orders):
+            graph.drivers_orders[driver.id] = graph.drivers_orders[driver.id] + 1
+        
+        return jsonify({
+            "success": True,
+            "message": f"Order {order_id} assigned to driver {driver_id}"
+        })
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error assigning order: {str(e)}")
+        print(error_trace)
+        return jsonify({
+            "success": False,
+            "message": f"Error assigning order: {str(e)}"
+        }), 500
+
 # TODO: Future endpoint for computing driver paths on-demand (e.g., for mouse hover)
 # @routes.route('/api/simulation/driver-path', methods=['GET'])
 # def get_driver_path():

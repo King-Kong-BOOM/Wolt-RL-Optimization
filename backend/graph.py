@@ -172,7 +172,7 @@ class Graph:
         self.create_graph()
         self.precompute_matrices()
         
-        self.amount_of_orders = self.num_nodes * [0]
+        self.orders_in_nodes = [[] for _ in range(self.num_nodes)]
         self.drivers_orders = (self.num_drivers * [0]) if self.num_drivers is not None else []
 
     @staticmethod
@@ -184,11 +184,9 @@ class Graph:
             Function for creating the graph itself using the contructors parameters. 
             Uses geometric graph creation with 2D positions.
         """
-        # Initialize adjacency matrix first (needed for all paths)
-        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
-        
         if self.num_nodes <= 0:
             self.nodes = []
+            self.edges = np.zeros((0, 0), dtype=np.int32)
             self.node_positions = np.zeros((0, 2))
             return
         
@@ -212,11 +210,14 @@ class Graph:
         # Create nodes
         self.nodes = [self.node_f() for i in range(self.num_nodes)]
         
+        # Initialize adjacency matrix
+        self.edges = np.zeros((self.num_nodes, self.num_nodes), dtype=np.int32)
+        
         if self.num_nodes < 2 or self.num_edges <= 0:
             # Initialize drivers if num_drivers is provided
             if self.num_drivers is not None and self.num_drivers > 0:
                 for i in range(self.num_drivers):
-                    node_id = i % self.num_nodes
+                    node_id = i % self.num_nodes if self.num_nodes > 0 else 0
                     driver = Driver(i, node_id, self)
                     self.drivers.append(driver)
             return
@@ -358,9 +359,9 @@ class Graph:
         self.timestep += 1
         
         for i, node in enumerate(self.nodes):
-            if random.random() < node and self.amount_of_orders[i] < 3:
+            if random.random() < node and len(self.orders_in_nodes[i]) < 3:
                 self.orders.append(Order(i, random.choice([j for j in range(self.num_nodes) if j != i]), self.timestep))
-                self.amount_of_orders[i] += 1
+                self.orders_in_nodes[i].append(self.orders[-1])
 
         # Update all drivers and orders
         for driver in self.drivers:
@@ -421,46 +422,11 @@ class Graph:
             else:
                 status = "idle"
             
-            # Initialize movement info
-            next_node = None
-            target_node = None
-            edge_weight = None
-            progress = None
-            
-            # If driver has an order, determine target and next node
-            if driver.order is not None:
-                # Determine target node based on order status
-                if driver.order.is_picked_up and not driver.order.is_delivered:
-                    target_node = driver.order.dropoff_node
-                elif not driver.order.is_picked_up:
-                    target_node = driver.order.pickup_node
-                else:
-                    # Order is delivered, driver should be idle
-                    target_node = None
-                
-                # If driver is moving (delay > 0) and has a target, calculate next node
-                if driver.delay > 0 and target_node is not None:
-                    # Get next node from path matrix
-                    next_node_id = self.path_matrix[driver.current_node, target_node]
-                    if next_node_id != -1 and next_node_id < self.num_nodes:
-                        next_node = int(next_node_id)
-                        # Get edge weight
-                        edge_weight = int(self.edges[driver.current_node, next_node])
-                        if edge_weight > 0:
-                            # Calculate progress along edge (0 = at current node, 1 = at next node)
-                            # Progress increases as delay decreases
-                            progress = float((edge_weight - driver.delay) / edge_weight)
-                            progress = max(0.0, min(1.0, progress))  # Clamp between 0 and 1
-            
             drivers.append({
                 "id": f"driver-{driver.driver_id}",
                 "location": str(driver.current_node),
                 "status": status,
-                "delay": int(driver.delay),
-                "next_node": str(next_node) if next_node is not None else None,
-                "target_node": str(target_node) if target_node is not None else None,
-                "edge_weight": edge_weight,
-                "progress": progress
+                "delay": int(driver.delay)
             })
         
         # Convert orders to frontend format (tasks)
@@ -483,13 +449,21 @@ class Graph:
             else:
                 location = str(order.pickup_node)
             
+            # Find which driver has this order assigned
+            assigned_driver_id = None
+            for driver in self.drivers:
+                if driver.order is not None and driver.order.order_id == order.order_id:
+                    assigned_driver_id = f"driver-{driver.driver_id}"
+                    break
+            
             tasks.append({
                 "id": f"order-{order.order_id}",
                 "status": status,
                 "location": location,
                 "pickup_node": str(order.pickup_node),
                 "dropoff_node": str(order.dropoff_node),
-                "time_created": int(order.time_created)
+                "time_created": int(order.time_created),
+                "assigned_driver_id": assigned_driver_id
             })
         
         return {
@@ -500,11 +474,14 @@ class Graph:
             "tasks": tasks
         }
 
-    def get_state_representation(self, order_index) -> np.ndarray:
         """
         Returns a representation of the graph suitable for input to the optimizer.
         """
-        return ()
+    def get_state_representation(self) -> np.ndarray:
+        r = []
+        
+                
+        return r
 
     def compute_driver_path(self, driver_id: int, target_node: int) -> list:
         """
@@ -537,6 +514,38 @@ class Graph:
         # For now, return empty list
         return []
 
+    def unassign_order_from_driver(self, driver_id: int):
+        """
+        Unassigns the current order from a driver.
+        
+        Args:
+            driver_id: ID of the driver to unassign order from
+        
+        Returns:
+            True if order was unassigned, False if driver not found or had no order
+        """
+        # Find the driver
+        driver = None
+        for d in self.drivers:
+            if d.driver_id == driver_id:
+                driver = d
+                break
+        
+        if driver is None:
+            return False
+        
+        if driver.order is None:
+            return False
+        
+        # Unassign the order
+        driver.order = None
+        
+        # Update drivers_orders count
+        if driver.id < len(self.drivers_orders):
+            self.drivers_orders[driver.id] = max(0, self.drivers_orders[driver.id] - 1)
+        
+        return True
+
 class Driver:
     """
     Represents a single driver in the system. A driver has a current location (node), a list of assigned orders, and possibly
@@ -562,7 +571,7 @@ class Driver:
         if self.delay > 0:
             self.delay -= 1
         else:
-            if self.order is not None and self.order.is_picked_up and not self.order.is_delivered:
+            if self.order.is_picked_up and not self.order.is_delivered:
                 # Move towards dropoff node
                 next_node = self.graph.path_matrix[self.current_node, self.order.dropoff_node]
                 if next_node != -1:
@@ -572,7 +581,7 @@ class Driver:
                     if self.current_node == self.order.dropoff_node:
                         self.order.is_delivered = True
                         self.graph.drivers_orders[self.id] -= 1
-            elif self.order is not None and not self.order.is_picked_up:
+            elif not self.order.is_picked_up:
                 # Move towards pickup node
                 next_node = self.graph.path_matrix[self.current_node, self.order.pickup_node]
                 if next_node != -1:

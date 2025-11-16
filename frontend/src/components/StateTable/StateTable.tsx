@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import type { SimulationState, DriverState } from '../../types';
+import { useSimulationAPI } from '../../hooks/useSimulationAPI';
+import DriverSelectionModal from './DriverSelectionModal';
 import './StateTable.css';
 
 interface StateTableProps {
@@ -16,6 +18,10 @@ export default function StateTable({ state, selectedDriverId, onDriverSelect, se
   const [showDriverDetails, setShowDriverDetails] = useState<boolean>(false);
   const [showOrderDetails, setShowOrderDetails] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'drivers' | 'orders'>('drivers');
+  const [showDriverSelection, setShowDriverSelection] = useState<boolean>(false);
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [isAssigning, setIsAssigning] = useState<boolean>(false);
+  const { assignOrder } = useSimulationAPI();
 
   // Use prop if provided, otherwise use internal state
   const currentSelectedDriverId = selectedDriverId !== undefined ? selectedDriverId : internalSelectedDriverId;
@@ -68,6 +74,35 @@ export default function StateTable({ state, selectedDriverId, onDriverSelect, se
     if (!state?.tasks || !currentSelectedOrderId) return null;
     return state.tasks.find(task => task.id === currentSelectedOrderId) || null;
   }, [state?.tasks, currentSelectedOrderId]);
+
+  const handleAssignOrder = () => {
+    if (selectedOrder && selectedOrder.status !== 'delivered') {
+      setAssigningOrderId(selectedOrder.id);
+      setShowDriverSelection(true);
+    }
+  };
+
+  const handleDriverSelect = async (driverId: string) => {
+    if (!assigningOrderId) return;
+    
+    setIsAssigning(true);
+    try {
+      await assignOrder(assigningOrderId, driverId);
+      setShowDriverSelection(false);
+      setAssigningOrderId(null);
+      // State will update automatically via WebSocket
+    } catch (error) {
+      console.error('Error assigning order:', error);
+      // Error is already handled by useSimulationAPI
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleCancelDriverSelection = () => {
+    setShowDriverSelection(false);
+    setAssigningOrderId(null);
+  };
 
   if (!state) {
     return (
@@ -182,6 +217,11 @@ export default function StateTable({ state, selectedDriverId, onDriverSelect, se
                         ? `From: ${order.pickup_node} → To: ${order.dropoff_node}`
                         : `Location: ${order.location || 'N/A'}`}
                     </span>
+                    {order.assigned_driver_id && (
+                      <span className="driver-item-assigned" style={{ fontSize: '11px', color: '#4ECDC4', marginTop: '2px' }}>
+                        Assigned: {order.assigned_driver_id}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))
@@ -214,11 +254,36 @@ export default function StateTable({ state, selectedDriverId, onDriverSelect, se
                   </tbody>
                 </table>
               </div>
+              {selectedOrder.status !== 'delivered' && (
+                <div className="order-assignment-section">
+                  <button 
+                    className="assign-order-button"
+                    onClick={handleAssignOrder}
+                    disabled={isAssigning}
+                  >
+                    {isAssigning ? 'Assigning...' : 'Assign to Driver'}
+                  </button>
+                  {selectedOrder.assigned_driver_id && (
+                    <div className="assigned-driver-info">
+                      Assigned to: {selectedOrder.assigned_driver_id}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="state-table-empty">Select an order to view details</div>
           )}
         </div>
+      )}
+
+      {showDriverSelection && state?.drivers && assigningOrderId && (
+        <DriverSelectionModal
+          drivers={state.drivers}
+          onSelect={handleDriverSelect}
+          onCancel={handleCancelDriverSelection}
+          selectedOrderId={assigningOrderId}
+        />
       )}
     </div>
   );
