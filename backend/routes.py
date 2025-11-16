@@ -106,17 +106,68 @@ def create_simulation():
             num_drivers=num_drivers
         )
         
+        # Check if user wants to initialize optimizer
+        initialize_optimizer = hyperparameters.get('initialize_optimizer', False)
+        # Handle string "true"/"false" from JSON (though it should be boolean)
+        if isinstance(initialize_optimizer, str):
+            initialize_optimizer = initialize_optimizer.lower() in ('true', '1', 'yes')
+        elif not isinstance(initialize_optimizer, bool):
+            initialize_optimizer = bool(initialize_optimizer)
+        
+        print(f"DEBUG: initialize_optimizer flag from request: {initialize_optimizer} (type: {type(initialize_optimizer)})")
+        print(f"DEBUG: Full hyperparameters dict: {hyperparameters}")
+        optimizer = None
+        
+        if initialize_optimizer:
+            print("DEBUG: Attempting to initialize DQN optimizer...")
+            try:
+                from dqn_optimizer import DQNOptimizer
+                optimizer = DQNOptimizer(graph=new_graph)
+                print("DQN Optimizer initialized successfully")
+            except ImportError as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f"ERROR: Could not import DQN optimizer: {e}")
+                print(error_trace)
+                # Don't fail silently - return error to user
+                return jsonify({
+                    "success": False,
+                    "message": f"Failed to initialize optimizer: {str(e)}. Make sure stable-baselines3 is installed: pip install stable-baselines3"
+                }), 500
+            except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f"ERROR: Could not initialize optimizer: {e}")
+                print(error_trace)
+                # Don't fail silently - return error to user
+                return jsonify({
+                    "success": False,
+                    "message": f"Failed to initialize optimizer: {str(e)}"
+                }), 500
+        
         # Update app state with new graph
         if app_state is None:
             from appstate import AppState
-            app_state = AppState(graph=new_graph)
+            app_state = AppState(graph=new_graph, optimizer=optimizer)
+            print(f"DEBUG: Created new AppState with optimizer: {optimizer is not None}")
         else:
             app_state.graph = new_graph
+            # Always update optimizer (set to None if not initializing, or to new optimizer if initializing)
+            app_state.optimizer = optimizer
+            if optimizer is not None:
+                print(f"DEBUG: Updated existing AppState with optimizer: {optimizer is not None}")
+            else:
+                print(f"DEBUG: Set optimizer to None (not initializing)")
+        
+        print(f"DEBUG: Final app_state.optimizer: {app_state.optimizer is not None if app_state else 'app_state is None'}")
         
         # Update global app state reference
         set_app_state(app_state)
         from websocket_handler import set_app_state as set_ws_app_state, start_simulation_loop
         set_ws_app_state(app_state)
+        print(f"DEBUG: App state synchronized to websocket_handler")
+        if app_state.optimizer is not None:
+            print(f"DEBUG: Optimizer type after sync: {type(app_state.optimizer)}")
         
         # Start the simulation loop
         start_simulation_loop()
@@ -142,22 +193,51 @@ def train_agent():
     During training, communication is reduced/disabled to save resources.
     """
     global app_state
+    print(f"Training endpoint called. app_state: {app_state is not None}, graph: {app_state.graph is not None if app_state else False}, optimizer: {app_state.optimizer is not None if app_state else False}")
     
     try:
         data = request.get_json()
-        if not data or 'timesteps' not in data:
+        print(f"Training request data: {data}")
+        if not data:
             return jsonify({
                 "success": False,
-                "message": "Missing timesteps in request"
+                "message": "Missing request body"
             }), 400
         
-        timesteps = data['timesteps']
+        if 'timesteps' not in data:
+            return jsonify({
+                "success": False,
+                "message": "Missing 'timesteps' in request body"
+            }), 400
         
-        if app_state is None or app_state.graph is None:
+        timesteps = int(data['timesteps'])
+        print(f"Training requested for {timesteps} timesteps")
+        
+        if app_state is None:
             return jsonify({
                 "success": False,
                 "message": "No simulation available. Create a simulation first."
             }), 404
+        
+        if app_state.graph is None:
+            return jsonify({
+                "success": False,
+                "message": "No graph available. Create a simulation first."
+            }), 404
+        
+        if app_state.optimizer is None:
+            print("ERROR: Training requested but optimizer is None!")
+            print(f"DEBUG: app_state exists: {app_state is not None}")
+            print(f"DEBUG: app_state.graph exists: {app_state.graph is not None if app_state else False}")
+            print(f"DEBUG: app_state.optimizer: {app_state.optimizer}")
+            print(f"DEBUG: app_state.optimizer type: {type(app_state.optimizer)}")
+            print("Hint: Initialize optimizer by:")
+            print("  1. Checking 'Initialize DQN Optimizer' when creating simulation, OR")
+            print("  2. Calling POST /api/simulation/initialize-optimizer endpoint")
+            return jsonify({
+                "success": False,
+                "message": "No optimizer available. Please initialize optimizer first. Check 'Initialize DQN Optimizer' when creating simulation or call /api/simulation/initialize-optimizer endpoint."
+            }), 400  # Changed from 404 to 400 (Bad Request) since endpoint exists but precondition not met
         
         # Set training mode to reduce communication
         from websocket_handler import set_training_mode, send_training_start_message, send_training_end_message
@@ -167,20 +247,32 @@ def train_agent():
         start_timestep = app_state.graph.timestep
         send_training_start_message(start_timestep)
         
-        # TODO: Implement actual training logic
-        # For now, simulate training by running timesteps without sending updates
-        # In the future, this should:
-        # 1. Run training for specified timesteps
-        # 2. Update optimizer during training
-        # 3. Skip or reduce state updates during training (already implemented)
-        
-        # Simulate training (run timesteps without frequent updates)
-        # This is a placeholder - actual training will be implemented later
-        for _ in range(timesteps):
-            if app_state and app_state.graph:
-                app_state.time_step()
+        # Train the agent
+        try:
+            # Check if optimizer has train method
+            if hasattr(app_state.optimizer, 'train'):
+                app_state.train = True  # Enable training mode
+                app_state.optimizer.train(total_timesteps=timesteps)
+            else:
+                # Fallback: run timesteps with training enabled
+                app_state.train = True
+                for _ in range(timesteps):
+                    if app_state and app_state.graph:
+                        app_state.time_step()
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error during training: {str(e)}")
+            print(error_trace)
+            app_state.train = False
+            set_training_mode(False)
+            return jsonify({
+                "success": False,
+                "message": f"Training error: {str(e)}"
+            }), 500
         
         # End training mode and send final state
+        app_state.train = False
         end_timestep = app_state.graph.timestep
         set_training_mode(False)
         send_training_end_message(end_timestep)
@@ -419,6 +511,74 @@ def assign_order():
         return jsonify({
             "success": False,
             "message": f"Error assigning order: {str(e)}"
+        }), 500
+
+@routes.route('/api/simulation/optimizer-status', methods=['GET'])
+def optimizer_status():
+    """
+    HTTP GET endpoint for checking optimizer status.
+    """
+    global app_state
+    
+    if app_state is None:
+        return jsonify({
+            "success": False,
+            "has_optimizer": False,
+            "message": "No simulation available"
+        }), 404
+    
+    if app_state.graph is None:
+        return jsonify({
+            "success": False,
+            "has_optimizer": False,
+            "message": "No graph available"
+        }), 404
+    
+    has_optimizer = app_state.optimizer is not None
+    optimizer_type = type(app_state.optimizer).__name__ if has_optimizer else None
+    
+    return jsonify({
+        "success": True,
+        "has_optimizer": has_optimizer,
+        "optimizer_type": optimizer_type,
+        "message": f"Optimizer status: {'Initialized' if has_optimizer else 'Not initialized'}"
+    })
+
+@routes.route('/api/simulation/initialize-optimizer', methods=['POST'])
+def initialize_optimizer():
+    """
+    HTTP POST endpoint for initializing the DQN optimizer.
+    """
+    global app_state
+    
+    if app_state is None or app_state.graph is None:
+        return jsonify({
+            "success": False,
+            "message": "No simulation available. Create a simulation first."
+        }), 404
+    
+    try:
+        from dqn_optimizer import DQNOptimizer
+        optimizer = DQNOptimizer(graph=app_state.graph)
+        app_state.optimizer = optimizer
+        
+        return jsonify({
+            "success": True,
+            "message": "DQN Optimizer initialized successfully"
+        })
+    except ImportError:
+        return jsonify({
+            "success": False,
+            "message": "Stable Baselines 3 not installed. Install with: pip install stable-baselines3"
+        }), 500
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error initializing optimizer: {str(e)}")
+        print(error_trace)
+        return jsonify({
+            "success": False,
+            "message": f"Error initializing optimizer: {str(e)}"
         }), 500
 
 # TODO: Future endpoint for computing driver paths on-demand (e.g., for mouse hover)

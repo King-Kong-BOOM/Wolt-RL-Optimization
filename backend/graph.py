@@ -402,11 +402,31 @@ class Graph:
                 if driver.id < len(self.drivers_orders):
                     self.drivers_orders[driver.id] = self.drivers_orders[driver.id] + 1
         
-        # TODO: Handle optimizer action format (np.ndarray or other format)
-        # This will be implemented when the optimizer action format is defined
+        # Handle optimizer action format (np.ndarray from DQN)
         elif isinstance(action, np.ndarray):
-            # Placeholder for optimizer actions
-            pass
+            # Action format: [order_index, driver_id]
+            # order_index: index in pending orders list (or -1 for no action)
+            # driver_id: driver index (or num_drivers for no assignment)
+            if len(action) >= 2:
+                order_index = int(action[0])
+                driver_id = int(action[1])
+                
+                # Get pending orders
+                pending_orders = [o for o in self.orders if not o.is_delivered and not o.is_picked_up]
+                
+                # Check if valid order index
+                if 0 <= order_index < len(pending_orders) and 0 <= driver_id < len(self.drivers):
+                    order = pending_orders[order_index]
+                    driver = self.drivers[driver_id]
+                    
+                    # Assign order to driver (using dict format internally)
+                    assignment_action = {
+                        'type': 'assign',
+                        'order_id': order.order_id,
+                        'driver_id': driver.driver_id
+                    }
+                    # Recursively call do_action with dict format
+                    self.do_action(assignment_action)
 
     def time_step(self):
         """

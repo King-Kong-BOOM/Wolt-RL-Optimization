@@ -32,6 +32,8 @@ interface UseSimulationAPIResult {
   assignOrder: (orderId: string, driverId: string) => Promise<void>;
   clearError: () => void;
   fetchInitialRenderData: () => Promise<void>;
+  checkOptimizerStatus: () => Promise<boolean>;
+  initializeOptimizer: () => Promise<void>;
 }
 
 export function useSimulationAPI(): UseSimulationAPIResult {
@@ -186,6 +188,8 @@ export function useSimulationAPI(): UseSimulationAPIResult {
   const createSimulation = useCallback(async (hyperparameters: Hyperparameters) => {
     try {
       setError(null);
+      console.log('DEBUG: Creating simulation with hyperparameters:', hyperparameters);
+      console.log('DEBUG: initialize_optimizer value:', hyperparameters.initialize_optimizer);
       const response = await axios.post<APIResponse>(
         `${API_BASE_URL}/api/simulation/create`,
         { hyperparameters } as CreateSimulationRequest
@@ -224,7 +228,13 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       // Training end will be signaled via WebSocket
     } catch (err) {
       console.error('Error training agent:', err);
-      setError(axios.isAxiosError(err) ? err.message : 'Failed to train agent');
+      if (axios.isAxiosError(err) && err.response) {
+        const errorMessage = err.response.data?.message || err.message;
+        setError(errorMessage);
+        console.error('Training error details:', err.response.data);
+      } else {
+        setError(axios.isAxiosError(err) ? err.message : 'Failed to train agent');
+      }
       setTrainingState({ isTraining: false });
     }
   }, []);
@@ -317,6 +327,36 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     setError(null);
   }, []);
 
+  const checkOptimizerStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await axios.get<APIResponse>(
+        `${API_BASE_URL}/api/simulation/optimizer-status`
+      );
+      if (response.data.success && 'has_optimizer' in response.data) {
+        return (response.data as any).has_optimizer === true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error checking optimizer status:', err);
+      return false;
+    }
+  }, []);
+
+  const initializeOptimizer = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await axios.post<APIResponse>(
+        `${API_BASE_URL}/api/simulation/initialize-optimizer`
+      );
+      if (!response.data.success) {
+        setError(response.data.message || 'Failed to initialize optimizer');
+      }
+    } catch (err) {
+      console.error('Error initializing optimizer:', err);
+      setError(axios.isAxiosError(err) ? err.message : 'Failed to initialize optimizer');
+    }
+  }, []);
+
   // Fetch initial render data and speed on mount
   useEffect(() => {
     fetchInitialRenderData();
@@ -348,6 +388,8 @@ export function useSimulationAPI(): UseSimulationAPIResult {
     assignOrder,
     clearError,
     fetchInitialRenderData,
+    checkOptimizerStatus,
+    initializeOptimizer,
   };
 }
 

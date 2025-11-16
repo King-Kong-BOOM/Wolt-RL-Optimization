@@ -46,9 +46,22 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
   const [isOverInteractiveElement, setIsOverInteractiveElement] = useState(false);
   const { getNode } = useReactFlow();
 
+  // Defensive check: ensure state has nodes before passing to layout
+  const nodes = state?.nodes || [];
+  const edges = state?.edges || [];
+  
+  // Log warning if nodes disappear
+  const previousNodesRef = useRef<number>(nodes.length);
+  useEffect(() => {
+    if (previousNodesRef.current > 0 && nodes.length === 0) {
+      console.warn('State nodes array became empty. Previous count:', previousNodesRef.current, 'State:', state);
+    }
+    previousNodesRef.current = nodes.length;
+  }, [nodes.length, state]);
+  
   const { reactFlowNodes: baseNodes, reactFlowEdges: baseEdges } = useGraphLayout(
-    state?.nodes || [],
-    state?.edges || [],
+    nodes,
+    edges,
     { width, height, iterations: 100 }
   );
 
@@ -132,6 +145,11 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
   }, [state?.tasks, state?.timestep]);
 
   const reactFlowNodes = useMemo(() => {
+    // Defensive check: ensure baseNodes is valid
+    if (!baseNodes || baseNodes.length === 0) {
+      console.warn('No base nodes available for rendering. baseNodes:', baseNodes, 'state?.nodes:', state?.nodes);
+      return [];
+    }
     return baseNodes.map(node => ({
       ...node,
       data: {
@@ -141,7 +159,7 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
         isFlashing: flashingNodes.has(node.id),
       },
     }));
-  }, [baseNodes, showProbabilities, selectedDriverLocationNodeId, selectedOrderLocationNodeId, flashingNodes]);
+  }, [baseNodes, showProbabilities, selectedDriverLocationNodeId, selectedOrderLocationNodeId, flashingNodes, state?.nodes]);
 
   const onInit = useCallback((instance: any) => {
     reactFlowInstance.current = instance;
@@ -185,17 +203,28 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
     setViewport(viewport);
   }, []);
 
-  // Fit view when new graph is loaded (only when node count changes, not on every timestep)
+  // Fit view when new graph is loaded (only when node count changes from 0 to >0, not on every timestep)
   const previousNodeCountRef = useRef<number>(0);
+  const hasFittedViewRef = useRef<boolean>(false);
   useEffect(() => {
     const currentNodeCount = reactFlowNodes.length;
-    if (reactFlowInstance.current && currentNodeCount > 0 && currentNodeCount !== previousNodeCountRef.current) {
-      previousNodeCountRef.current = currentNodeCount;
-      setTimeout(() => {
-        reactFlowInstance.current?.fitView({ padding: 0.2, duration: 500 });
-      }, 100);
+    // Only fit view when nodes first appear (0 -> N) or when count increases significantly
+    // Don't fit view if nodes disappear (N -> 0) as this might be a temporary state issue
+    if (reactFlowInstance.current && currentNodeCount > 0) {
+      if (previousNodeCountRef.current === 0 || (currentNodeCount > previousNodeCountRef.current && !hasFittedViewRef.current)) {
+        previousNodeCountRef.current = currentNodeCount;
+        hasFittedViewRef.current = true;
+        setTimeout(() => {
+          reactFlowInstance.current?.fitView({ padding: 0.2, duration: 500 });
+        }, 100);
+      }
+    } else if (currentNodeCount === 0 && previousNodeCountRef.current > 0) {
+      // Nodes disappeared - reset flags but don't fit view
+      console.warn('Nodes disappeared from view. Previous count:', previousNodeCountRef.current);
+      hasFittedViewRef.current = false;
+      previousNodeCountRef.current = 0;
     }
-  }, [reactFlowNodes.length]); // Removed state?.timestep to prevent constant view resets
+  }, [reactFlowNodes.length]); // Only depend on length, not state changes
 
   // Center view on selected driver or order node when selected
   useEffect(() => {
@@ -336,7 +365,7 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
         onEdgeMouseLeave={handleEdgeMouseLeave}
         panOnDrag={!isOverInteractiveElement}
         panOnScroll={true}
-        fitView
+        fitView={false}
         attributionPosition="bottom-left"
         style={{ background: '#1a1a1a' }}
       >

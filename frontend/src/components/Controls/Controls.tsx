@@ -29,17 +29,29 @@ export default function Controls({
     clearError,
     speed,
     setSpeed,
+    checkOptimizerStatus,
+    initializeOptimizer,
   } = useSimulationAPI();
+  
+  const [optimizerInitialized, setOptimizerInitialized] = useState<boolean | null>(null);
 
   const [hyperparameters, setHyperparameters] = useState<Hyperparameters>({
     num_nodes: 10,
     num_drivers: 3,
     num_edges: 12,
     task_arrival_rate: 0.5,
+    initialize_optimizer: false,
   });
 
-  const [trainTimesteps, setTrainTimesteps] = useState<number>(100);
+  const [trainTimesteps, setTrainTimesteps] = useState<number>(1000);
   const [speedInput, setSpeedInput] = useState<number>(1.0);
+  
+  // Check optimizer status after creating simulation
+  useEffect(() => {
+    if (isConnected) {
+      checkOptimizerStatus().then(setOptimizerInitialized);
+    }
+  }, [isConnected, checkOptimizerStatus]);
 
   const handleCreateGraph = async () => {
     // Validate that num_edges >= num_nodes - 1 (minimum for connected graph)
@@ -52,6 +64,11 @@ export default function Controls({
     }
     
     await createSimulation(hyperparameters);
+    // Check optimizer status after creation
+    setTimeout(async () => {
+      const status = await checkOptimizerStatus();
+      setOptimizerInitialized(status);
+    }, 500);
   };
 
   const handlePauseResume = async () => {
@@ -121,22 +138,67 @@ export default function Controls({
         </button>
 
         <div className="train-section">
-          <input
-            type="number"
-            value={trainTimesteps}
-            onChange={(e) => setTrainTimesteps(parseInt(e.target.value) || 100)}
-            min={1}
-            max={10000}
-            disabled={trainingState.isTraining}
-            className="train-input"
-          />
-          <button
-            onClick={handleTrain}
-            disabled={!isConnected || trainingState.isTraining}
-            className="control-button"
-          >
-            {trainingState.isTraining ? 'Training...' : 'Train for T timesteps'}
-          </button>
+          <h3 style={{ marginBottom: '8px', fontSize: '14px', color: '#fff' }}>RL Training</h3>
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '12px', color: '#e0e0e0', marginBottom: '8px' }}>
+              <input
+                type="checkbox"
+                checked={hyperparameters.initialize_optimizer as boolean || false}
+                onChange={(e) => setHyperparameters({ ...hyperparameters, initialize_optimizer: e.target.checked })}
+                style={{ marginRight: '8px' }}
+              />
+              Initialize DQN Optimizer (requires Stable Baselines 3)
+            </label>
+            {optimizerInitialized !== null && (
+              <div style={{ fontSize: '11px', color: optimizerInitialized ? '#4caf50' : '#f44336', marginLeft: '8px', marginTop: '4px' }}>
+                {optimizerInitialized ? '✓ Optimizer Ready' : '✗ Optimizer Not Initialized'}
+              </div>
+            )}
+          </div>
+          {optimizerInitialized === false && (
+            <button
+              onClick={async () => {
+                await initializeOptimizer();
+                const status = await checkOptimizerStatus();
+                setOptimizerInitialized(status);
+              }}
+              style={{ 
+                marginBottom: '8px', 
+                padding: '4px 8px', 
+                fontSize: '11px',
+                backgroundColor: '#4caf50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Initialize Optimizer Now
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="number"
+              value={trainTimesteps}
+              onChange={(e) => setTrainTimesteps(parseInt(e.target.value) || 1000)}
+              min={100}
+              max={100000}
+              step={100}
+              disabled={trainingState.isTraining}
+              className="train-input"
+              style={{ flex: 1 }}
+            />
+            <button
+              onClick={handleTrain}
+              disabled={!isConnected || trainingState.isTraining}
+              className="control-button"
+            >
+              {trainingState.isTraining ? 'Training...' : 'Train Agent'}
+            </button>
+          </div>
+          <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+            Training timesteps: {trainTimesteps.toLocaleString()}
+          </div>
         </div>
       </div>
 
