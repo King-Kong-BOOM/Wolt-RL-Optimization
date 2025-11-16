@@ -13,11 +13,17 @@ class AppState:
         Advances the application state by one time step. This involves updating the graph and optimizer states.
         """
         
-        if self.optimizer and self.graph:
-            action = self.optimizer.get_action(self.graph)
-            self.graph.do_action(action)
+        if self.graph:
+            # If optimizer exists, get action and apply it before time step
+            if self.optimizer:
+                action = self.optimizer.get_action(self.graph)
+                self.graph.do_action(action)
+            
+            # Always advance graph time step (regardless of optimizer presence)
             self.graph.time_step()
-            if self.train:
+            
+            # If optimizer exists and training, do training step after time step
+            if self.optimizer and self.train:
                 self.optimizer.train_step(self.graph)
     
     def apply_action(self, action):

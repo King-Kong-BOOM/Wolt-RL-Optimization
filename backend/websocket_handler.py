@@ -70,12 +70,23 @@ def start_simulation_loop():
     
     def loop():
         global simulation_speed
+        print(f"Simulation loop started (speed: {simulation_speed} timesteps/sec)")
+        step_count = 0
         while simulation_running:
             if app_state and app_state.graph:
-                # Advance simulation by one step
-                app_state.time_step()
-                # Send state update to all clients
-                send_state_update()
+                try:
+                    # Advance simulation by one step
+                    app_state.time_step()
+                    step_count += 1
+                    # Print debug info every 10 steps
+                    if step_count % 10 == 0:
+                        print(f"Simulation step {step_count}, timestep: {app_state.graph.timestep}")
+                    # Send state update to all clients
+                    send_state_update()
+                except Exception as e:
+                    print(f"Error in simulation loop at step {step_count}: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Calculate sleep interval based on speed (timesteps per second)
             # If speed is 1.0, we want 1 timestep per second, so sleep 1.0 second

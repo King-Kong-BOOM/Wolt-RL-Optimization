@@ -185,14 +185,17 @@ function GraphViewComponentInner({ state, width, height, showEdgeWeights = false
     setViewport(viewport);
   }, []);
 
-  // Fit view when new graph is loaded
+  // Fit view when new graph is loaded (only when node count changes, not on every timestep)
+  const previousNodeCountRef = useRef<number>(0);
   useEffect(() => {
-    if (reactFlowInstance.current && reactFlowNodes.length > 0) {
+    const currentNodeCount = reactFlowNodes.length;
+    if (reactFlowInstance.current && currentNodeCount > 0 && currentNodeCount !== previousNodeCountRef.current) {
+      previousNodeCountRef.current = currentNodeCount;
       setTimeout(() => {
         reactFlowInstance.current?.fitView({ padding: 0.2, duration: 500 });
       }, 100);
     }
-  }, [reactFlowNodes.length, state?.timestep]);
+  }, [reactFlowNodes.length]); // Removed state?.timestep to prevent constant view resets
 
   // Center view on selected driver or order node when selected
   useEffect(() => {

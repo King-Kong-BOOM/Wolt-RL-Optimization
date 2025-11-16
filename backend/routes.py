@@ -272,8 +272,12 @@ def set_speed():
                 "message": "Speed must be greater than 0"
             }), 400
         
-        from websocket_handler import set_simulation_speed
+        from websocket_handler import set_simulation_speed, start_simulation_loop
         set_simulation_speed(speed)
+        
+        # Start the simulation loop if it's not already running
+        # This ensures time starts advancing when speed is set
+        start_simulation_loop()
         
         return jsonify({
             "success": True,

@@ -41,8 +41,12 @@ def main():
         socketio = SocketIO(app, cors_allowed_origins="*")
         
         # Register WebSocket handlers
-        from websocket_handler import register_socketio_handlers
+        from websocket_handler import register_socketio_handlers, start_simulation_loop
         register_socketio_handlers(socketio)
+        
+        # Start the simulation loop if a graph exists
+        if app_state and app_state.graph:
+            start_simulation_loop()
         
         # Start the server with SocketIO
         socketio.run(app, host='localhost', port=5000, debug=True)

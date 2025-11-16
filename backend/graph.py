@@ -627,22 +627,25 @@ class Driver:
         if self.delay > 0:
             self.delay -= 1
         else:
-            if self.order.is_picked_up and not self.order.is_delivered:
-                # Move towards dropoff node
-                next_node = self.graph.path_matrix[self.current_node, self.order.dropoff_node]
-                if next_node != -1:
-                    travel_time = self.graph.edges[self.current_node, next_node]
-                    self.delay = travel_time - 1  # Subtract 1 since we move this timestep
-                    self.current_node = next_node
-                    if self.current_node == self.order.dropoff_node:
-                        self.order.is_delivered = True
-                        self.graph.drivers_orders[self.id] -= 1
-            elif not self.order.is_picked_up:
-                # Move towards pickup node
-                next_node = self.graph.path_matrix[self.current_node, self.order.pickup_node]
-                if next_node != -1:
-                    travel_time = self.graph.edges[self.current_node, next_node]
-                    self.delay = travel_time - 1  # Subtract 1 since we move this timestep
-                    self.current_node = next_node
-                    if self.current_node == self.order.pickup_node:
-                        self.order.is_picked_up = True
+            # Only process movement if driver has an order assigned
+            if self.order is not None:
+                if self.order.is_picked_up and not self.order.is_delivered:
+                    # Move towards dropoff node
+                    next_node = self.graph.path_matrix[self.current_node, self.order.dropoff_node]
+                    if next_node != -1:
+                        travel_time = self.graph.edges[self.current_node, next_node]
+                        self.delay = travel_time - 1  # Subtract 1 since we move this timestep
+                        self.current_node = next_node
+                        if self.current_node == self.order.dropoff_node:
+                            self.order.is_delivered = True
+                            if self.id < len(self.graph.drivers_orders):
+                                self.graph.drivers_orders[self.id] = max(0, self.graph.drivers_orders[self.id] - 1)
+                elif not self.order.is_picked_up:
+                    # Move towards pickup node
+                    next_node = self.graph.path_matrix[self.current_node, self.order.pickup_node]
+                    if next_node != -1:
+                        travel_time = self.graph.edges[self.current_node, next_node]
+                        self.delay = travel_time - 1  # Subtract 1 since we move this timestep
+                        self.current_node = next_node
+                        if self.current_node == self.order.pickup_node:
+                            self.order.is_picked_up = True

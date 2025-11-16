@@ -47,6 +47,18 @@ export function useSimulationAPI(): UseSimulationAPIResult {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  // Use refs to access latest state values in WebSocket callbacks without causing reconnections
+  const stateRef = useRef<SimulationState | null>(null);
+  const trainingStateRef = useRef<TrainingState>({ isTraining: false });
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  
+  useEffect(() => {
+    trainingStateRef.current = trainingState;
+  }, [trainingState]);
 
   const connectWebSocket = useCallback(() => {
     try {
@@ -80,7 +92,8 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       socket.on('state_update', (message: WebSocketMessage) => {
         try {
           if (message.type === 'state_update') {
-            if (message.mode === 'simulation' && !trainingState.isTraining) {
+            // Use ref to get latest training state without causing reconnection
+            if (message.mode === 'simulation' && !trainingStateRef.current.isTraining) {
               // Only update state during simulation, not during training
               if (message.data) {
                 setState(message.data);
@@ -89,13 +102,13 @@ export function useSimulationAPI(): UseSimulationAPIResult {
           } else if (message.type === 'training_start') {
             setTrainingState({
               isTraining: true,
-              startTimestep: message.timestep || state?.timestep,
+              startTimestep: message.timestep || stateRef.current?.timestep,
             });
           } else if (message.type === 'training_end') {
             setTrainingState((prev) => ({
               isTraining: false,
               startTimestep: prev.startTimestep,
-              endTimestep: message.timestep || state?.timestep,
+              endTimestep: message.timestep || stateRef.current?.timestep,
             }));
             // Resume state updates after training
             if (message.data) {
@@ -136,7 +149,7 @@ export function useSimulationAPI(): UseSimulationAPIResult {
       console.error('Error creating Socket.IO connection:', err);
       setError('Failed to create Socket.IO connection');
     }
-  }, [state?.timestep, trainingState.isTraining]);
+  }, []); // Remove state?.timestep and trainingState.isTraining from dependencies to prevent reconnection on every update
 
   useEffect(() => {
     connectWebSocket();
