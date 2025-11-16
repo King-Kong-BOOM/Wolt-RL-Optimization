@@ -500,7 +500,7 @@ class Graph:
             "tasks": tasks
         }
 
-    def get_state_representation(self) -> np.ndarray:
+    def get_state_representation(self, order_index) -> np.ndarray:
         """
         Returns a representation of the graph suitable for input to the optimizer.
         """
